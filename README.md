@@ -2,7 +2,10 @@
 
 this project is an implementation of a windows api calling convention for go. it is an expansion of concepts from `carved4/go-native-syscall`. the library provides infrastructure to interact with the windows api without importing the `syscall` package or linking against windows libraries at compile time. it is focused on the low-level mechanics of api invocation and does not include capabilities beyond that scope.
 
-## NOTE 
+## demo
+![demo (3)](https://github.com/user-attachments/assets/0786f2db-043b-4b1e-8af2-da8f651c2864)
+
+## note 
 always import runtime/debug and call debug.SetGCPercent(-1) to stop gc from collecting our utf16ptrfromstring buffers, fuck u google
 
 ## problem: stack probing and goroutines
