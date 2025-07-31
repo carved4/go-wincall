@@ -1,7 +1,6 @@
 package wincall
 
 import (
-	"runtime"
 	"sync"
 	"unsafe"
 	"github.com/carved4/go-wincall/pkg/obf"
@@ -29,8 +28,6 @@ type libcall struct {
 
 
 func DirectCall(funcAddr uintptr, args ...uintptr) (uintptr, error) {
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
 	
 	lc := &libcall{
 		fn: funcAddr,
@@ -63,12 +60,12 @@ func initAddresses() {
 
 func LoadLibraryW(name string) uintptr {
 	namePtr, _ := UTF16PtrFromString(name)
-	r1, _ := DirectCall(getLoadLibraryWAddr(), uintptr(unsafe.Pointer(namePtr)))
+	r1, _ := CallInNewThread(getLoadLibraryWAddr(), uintptr(unsafe.Pointer(namePtr)))
 	return r1
 }
 
 func GetProcAddress(moduleHandle uintptr, proc unsafe.Pointer) uintptr {
-	r1, _ := DirectCall(getGetProcAddressAddr(), moduleHandle, uintptr(proc))
+	r1, _ := CallInNewThread(getGetProcAddressAddr(), moduleHandle, uintptr(proc))
 	return r1
 }
 
@@ -90,7 +87,7 @@ func IsDebuggerPresent() bool {
 	if isDebuggerPresentAddr == 0 {
 		return false
 	}
-	r1, _ := DirectCall(isDebuggerPresentAddr)
+	r1, _ := CallInNewThread(isDebuggerPresentAddr)
 	return r1 != 0
 }
 

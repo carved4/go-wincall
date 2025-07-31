@@ -9,7 +9,9 @@ import (
 
 
 var CallInNewThread = wincall.CallInNewThread
-var LoadLibraryW = wincall.LoadLibraryW
+func LoadLibraryW(name string) uintptr {
+	return wincall.LoadLibraryW(name)
+}
 var GetProcAddress = wincall.GetProcAddress
 func UTF16PtrFromString(s string) (*uint16, error) {
 	return wincall.UTF16PtrFromString(s)
