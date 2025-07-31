@@ -102,3 +102,5 @@ wincall.CallInNewThread(
 - `GetFunctionAddress(moduleBase uintptr, funcHash uint32)` - get function address from hash
 - `GetHash(s string)` - generate djb2 hash for string
 
+> note - every Call() spawns a new windows thread via 
+an indirect syscall to NtCreateThreadEx, lots of calls means lots of threads. keep this in mind!
