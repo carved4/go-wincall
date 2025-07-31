@@ -5,7 +5,7 @@ import (
 	"runtime/debug"
 	"unicode/utf16"
 	"unsafe"
-	"wincall"
+	"github.com/carved4/go-wincall"
 )
 
 func main() {

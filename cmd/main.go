@@ -2,7 +2,7 @@ package main
 
 import (
 	"unsafe"
-	"wincall"
+	"github.com/carved4/go-wincall"
 	"runtime/debug"
 )
 

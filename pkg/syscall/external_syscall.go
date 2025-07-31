@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"runtime"
 
-	"wincall/pkg/resolve"
+	"github.com/carved4/go-wincall/pkg/resolve"
 )
 
 

@@ -2,9 +2,9 @@ package wincall
 
 import (
 	"fmt"
-	"wincall/pkg/obf"
-	"wincall/pkg/resolve"
-	"wincall/pkg/wincall"
+	"github.com/carved4/go-wincall/pkg/obf"
+	"github.com/carved4/go-wincall/pkg/resolve"
+	"github.com/carved4/go-wincall/pkg/wincall"
 )
 
 

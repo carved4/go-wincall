@@ -4,8 +4,8 @@ import (
 	"runtime"
 	"sync"
 	"unsafe"
-	"wincall/pkg/obf"
-	"wincall/pkg/resolve"
+	"github.com/carved4/go-wincall/pkg/obf"
+	"github.com/carved4/go-wincall/pkg/resolve"
 )
 
 var (

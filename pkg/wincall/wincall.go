@@ -3,9 +3,9 @@ package wincall
 import (
 	"fmt"
 	"unsafe"
-	"wincall/pkg/obf"
-	"wincall/pkg/resolve"
-	"wincall/pkg/syscall"
+	"github.com/carved4/go-wincall/pkg/obf"
+	"github.com/carved4/go-wincall/pkg/resolve"
+	"github.com/carved4/go-wincall/pkg/syscall"
 )
 
 //go:noescape

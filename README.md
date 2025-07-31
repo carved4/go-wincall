@@ -5,6 +5,11 @@ this project is an implementation of a windows api calling convention for go. it
 ## demo
 ![demo (3)](https://github.com/user-attachments/assets/0786f2db-043b-4b1e-8af2-da8f651c2864)
 
+## install
+```bash
+go get github.com/carved4/go-wincall
+```
+
 ## note 
 always import runtime/debug and call debug.SetGCPercent(-1) to stop gc from collecting our utf16ptrfromstring buffers, fuck u google
 
@@ -32,7 +37,7 @@ first, import the necessary packages and disable garbage collection to prevent c
 ```go
 import (
 	"unsafe"
-	"wincall"
+	"github.com/carved4/go-wincall"
 	"runtime/debug"
 )
 

@@ -3,7 +3,7 @@ package resolve
 import (
 	"time"
 	"unsafe"
-	"wincall/pkg/obf"
+	"github.com/carved4/go-wincall/pkg/obf"
 	"sort"
 	"fmt"
 	"github.com/Binject/debug/pe"
