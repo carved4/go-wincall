@@ -1,6 +1,7 @@
 package wincall
 
 import (
+	"fmt"
 	"wincall/pkg/obf"
 	"wincall/pkg/resolve"
 	"wincall/pkg/wincall"
@@ -17,20 +18,27 @@ var GetModuleBase = resolve.GetModuleBase
 var GetFunctionAddress = resolve.GetFunctionAddress
 var GetHash = obf.DBJ2HashStr
 func Call(dllName, funcName string, args ...uintptr) (uintptr, error) {
-	dllHash := obf.GetHash(dllName)
-	moduleBase := resolve.GetModuleBase(dllHash)
+	dllHash := GetHash(dllName) 
+	moduleBase := GetModuleBase(dllHash)
 	if moduleBase == 0 {
 		moduleBase = wincall.LoadLibraryW(dllName)
 		if moduleBase == 0 {
-			return 0, nil
+			return 0, fmt.Errorf("failed to load DLL: %s", dllName)
 		}
 	}
-	funcHash := obf.GetHash(funcName)
-	funcAddr := resolve.GetFunctionAddress(moduleBase, funcHash)
+	funcHash := GetHash(funcName) 
+	funcAddr := GetFunctionAddress(moduleBase, funcHash)
 	if funcAddr == 0 {
-		return 0, nil
+		return 0, fmt.Errorf("failed to resolve function: %s in %s", funcName, dllName)
 	}
-	return wincall.CallInNewThread(funcAddr, args...)
+	
+	// Explicitly capture result to ensure proper return value propagation
+	// This prevents compiler optimization issues that can cause return value loss
+	result, err := wincall.CallInNewThread(funcAddr, args...)
+	if err != nil {
+		return 0, err
+	}
+	return result, nil
 }
 
 func UTF16ptr(s string) (*uint16, error){
