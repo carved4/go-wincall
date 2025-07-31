@@ -18,12 +18,12 @@ func wincall_get_winthread_entry_addr() uintptr
 
 // NtCreateThreadEx wrapper
 func NtCreateThreadEx(threadHandle *uintptr, desiredAccess uintptr, objectAttributes uintptr, processHandle uintptr, startAddress uintptr, parameter uintptr, createFlags uintptr, stackZeroBits uintptr, stackCommitSize uintptr, stackReserveSize uintptr, attributeList uintptr) (uint32, error) {
-	syscallNum := resolve.GetSyscallNumber(obf.GetHash("NtCreateThreadEx"))
+	syscallNum, syscallAddr := resolve.GetSyscallAndAddress(obf.GetHash("NtCreateThreadEx"))
 	if syscallNum == 0 {
 		return 0xC0000139, fmt.Errorf("failed to resolve NtCreateThreadEx") // STATUS_PROCEDURE_NOT_FOUND
 	}
 
-	ret, err := syscall.ExternalSyscall(syscallNum,
+	ret, err := syscall.IndirectSyscall(syscallNum, syscallAddr,
 		uintptr(unsafe.Pointer(threadHandle)),
 		desiredAccess,
 		objectAttributes,
@@ -59,7 +59,8 @@ func NtWaitForSingleObject(handle uintptr, alertable bool, timeout *int64) (uint
 		timeoutPtr = uintptr(unsafe.Pointer(timeout))
 	}
 
-	ret, err := syscall.ExternalSyscall(syscallNum, handle, alertableFlag, timeoutPtr)
+	syscallNum2, syscallAddr := resolve.GetSyscallAndAddress(obf.GetHash("NtWaitForSingleObject"))
+	ret, err := syscall.IndirectSyscall(syscallNum2, syscallAddr, handle, alertableFlag, timeoutPtr)
 	if err != nil {
 		return uint32(ret), err
 	}
