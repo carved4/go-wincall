@@ -19,7 +19,7 @@ calling certain windows dll functions through our plan9 asm stub can result in i
 
 ## solution: native thread execution
 
-the implemented solution bypasses go's thread and stack management for the api call. a direct syscall to `ntcreatethreadex` creates a new, native windows thread. this os-level thread is initialized with a full-sized stack that satisfies the `_chkstk` probe. the target function and its arguments are passed to this new thread for execution. the result is retrieved after the thread completes and is synchronized via an indirect syscall to `ntwaitforsingleobject`. this ensures the call operates in an environment with a native stack.
+the implemented solution bypasses go's thread and stack management for the api call. an indirect syscall to `ntcreatethreadex` creates a new, native windows thread. this os-level thread is initialized with a full-sized stack that satisfies the `_chkstk` probe. the target function and its arguments are passed to this new thread for execution. the result is retrieved after the thread completes and is synchronized via an indirect syscall to `ntwaitforsingleobject`. this ensures the call operates in an environment with a native stack.
 
 ### technical details
 
