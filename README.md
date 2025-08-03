@@ -17,14 +17,15 @@ always import runtime/debug and call debug.SetGCPercent(-1) to stop gc from coll
 
 calling certain windows dll functions through our plan9 asm stub can result in intermittent access violation crashes, particularly when interacting with libraries compiled with msvc (e.g., `msvcrt.dll`). the root cause is a mismatch between go's stack management and the windows c runtime's expectations. many msvc-compiled functions begin with a stack probe (`_chkstk`) that requires a large, contiguous stack. go's goroutines use smaller, segmented stacks. when a dll function running on a goroutine attempts its stack probe, it accesses memory beyond the goroutine's stack limit, causing a stack overflow. using `runtime.lockosthread` is insufficient because the underlying stack is still managed by go.
 
-## solution: native thread execution
+## solution: persistent native thread execution
 
-the implemented solution bypasses go's thread and stack management for the api call. an indirect syscall to `ntcreatethreadex` creates a new, native windows thread. this os-level thread is initialized with a full-sized stack that satisfies the `_chkstk` probe. the target function and its arguments are passed to this new thread for execution. the result is retrieved after the thread completes and is synchronized via an indirect syscall to `ntwaitforsingleobject`. this ensures the call operates in an environment with a native stack.
+the implemented solution bypasses go's thread and stack management for api calls using a single, persistent native windows thread. an indirect syscall to `ntcreatethreadex` creates one native windows thread during initialization. this os-level thread is initialized with a full-sized stack that satisfies the `_chkstk` probe and runs an infinite event loop waiting for api call requests. when a call is needed, the target function and its arguments are passed to this persistent worker thread via shared memory and event signaling. the result is retrieved after execution and synchronized back to the calling goroutine. this ensures all calls operate in an environment with a native stack while maintaining massive efficiency gains over the previous one-thread-per-call model.
 
 ### technical details
 
-the framework avoids high-level windows apis for its setup and execution. module base addresses are found by walking the process environment block (`peb`) and its loader data structures. once a module like `ntdll.dll` is located in memory, its `pe` header is parsed to find the export address table (eat). function addresses are resolved by hashing exported function names and comparing them against a target hash, avoiding `loadlibrary` and `getprocaddress`. to maintain version independence, syscall numbers are not hardcoded. instead, the prologue of the target syscall function (e.g., `ntcreatethreadex`) is read to dynamically extract the syscall number from the `mov eax, <ssn>` instruction. the api call is performed in a new native thread created via an indirect syscall to `ntcreatethreadex`. a pointer to a `libcall` struct, containing the target function's address and arguments, is passed to the thread. an assembly entry point, `wincall_winthread_entry`, unpacks this struct and executes the call using a `stdcall` assembly trampoline. the main go program waits for completion via an indirect syscall to `ntwaitforsingleobject` before retrieving the return value.
+the framework avoids high-level windows apis for its setup and execution. module base addresses are found by walking the process environment block (`peb`) and its loader data structures. once a module like `ntdll.dll` is located in memory, its `pe` header is parsed to find the export address table (eat). function addresses are resolved by hashing exported function names and comparing them against a target hash, avoiding `loadlibrary` and `getprocaddress`. to maintain version independence, syscall numbers are not hardcoded. instead, the prologue of the target syscall function (e.g., `ntcreatethreadex`) is read to dynamically extract the syscall number from the `mov eax, <ssn>` instruction. 
 
+the persistent worker thread is created via an indirect syscall to `ntcreatethreadex` during the first api call. the worker runs an assembly loop that waits on `ntwaitforsingleobject` for task events. when a task arrives, it reads the `libcall` struct from shared memory (allocated via `ntallocatevirtualmemory`), executes the call using a `stdcall` assembly trampoline, writes the result back to shared memory, and signals completion via `ntsetevent`. arguments are copied to stable memory to prevent corruption from go's stack management. the main go program waits for completion via `ntwaitforsingleobject` before retrieving the return value. mutex synchronization ensures thread-safe access to the shared memory block.
 
 ## api usage
 
@@ -81,8 +82,8 @@ funcAddr := wincall.GetFunctionAddress(moduleBase, funcHash)
 title, _ := wincall.UTF16ptr("manual")
 message, _ := wincall.UTF16ptr("no syscall import")
 
-// execute in new native thread
-wincall.CallInNewThread(
+// execute in persistent native thread
+wincall.CallWorker(
 	funcAddr,
 	0, // hwnd
 	uintptr(unsafe.Pointer(message)),
@@ -94,7 +95,7 @@ wincall.CallInNewThread(
 ### available functions
 
 - `Call(dllName, funcName string, args ...uintptr)` - high-level api call
-- `CallInNewThread(funcAddr uintptr, args ...uintptr)` - execute function in native thread
+- `CallWorker(funcAddr uintptr, args ...uintptr)` - execute function in persistent native thread
 - `LoadLibraryW(dllName string)` - load dll and return base address
 - `GetProcAddress(moduleBase uintptr, funcName string)` - get function address
 - `UTF16ptr(s string)` - convert go string to utf-16 pointer
@@ -102,5 +103,4 @@ wincall.CallInNewThread(
 - `GetFunctionAddress(moduleBase uintptr, funcHash uint32)` - get function address from hash
 - `GetHash(s string)` - generate djb2 hash for string
 
-> note - every Call() spawns a new windows thread via 
-an indirect syscall to NtCreateThreadEx, lots of calls means lots of threads. keep this in mind!
+> note - unlike the previous architecture, all calls now use a single persistent worker thread. this provides massive performance and opsec improvements over spawning individual threads per call.

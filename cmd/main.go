@@ -18,6 +18,7 @@ func main() {
 	wincall.LoadLibraryW("kerberos.dll")
 	wincall.LoadLibraryW("msvcrt.dll")
 	exampleHighLevel()
+	exampleManual()
 }
 // high level api usage :3
 func exampleHighLevel() {
@@ -42,7 +43,7 @@ func exampleManual() {
 	title, _ := wincall.UTF16ptr("manual")
 	message, _ := wincall.UTF16ptr("twitter.com/owengsmt")
 	
-	wincall.CallInNewThread(
+	wincall.CallWorker(
 		funcAddr,
 		0, // hwnd
 		uintptr(unsafe.Pointer(message)),
@@ -50,4 +51,3 @@ func exampleManual() {
 		0, // MB_OK
 	)
 }
-

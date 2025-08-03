@@ -8,7 +8,7 @@ import (
 )
 
 
-var CallInNewThread = wincall.CallInNewThread
+var CallWorker = wincall.CallWorker
 func LoadLibraryW(name string) uintptr {
 	return wincall.LoadLibraryW(name)
 }
@@ -36,7 +36,7 @@ func Call(dllName, funcName string, args ...uintptr) (uintptr, error) {
 	
 	// Explicitly capture result to ensure proper return value propagation
 	// This prevents compiler optimization issues that can cause return value loss
-	result, err := wincall.CallInNewThread(funcAddr, args...)
+	result, err := wincall.CallWorker(funcAddr, args...)
 	if err != nil {
 		return 0, err
 	}
