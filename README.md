@@ -102,5 +102,14 @@ wincall.CallWorker(
 - `GetModuleBase(dllHash uint32)` - get module base from hash
 - `GetFunctionAddress(moduleBase uintptr, funcHash uint32)` - get function address from hash
 - `GetHash(s string)` - generate djb2 hash for string
+- `NtAllocateVirtualMemory(processHandle uintptr, baseAddress *uintptr, zeroBits uintptr, regionSize *uintptr, allocationType uintptr, protect uintptr) (uint32, error)` Allocates memory in a target process.
+- `NtWriteVirtualMemory(processHandle uintptr, baseAddress uintptr, buffer uintptr, numberOfBytesToWrite uintptr, numberOfBytesWritten *uintptr) (uint32, error)`  Writes to memory in a target process.
+- `NtReadVirtualMemory(processHandle uintptr, baseAddress uintptr, buffer uintptr, numberOfBytesToRead uintptr, numberOfBytesRead *uintptr) (uint32, error)`  Reads memory from a target process.
+- `NtProtectVirtualMemory(processHandle uintptr, baseAddress *uintptr, regionSize *uintptr, newProtect uintptr, oldProtect *uintptr) (uint32, error)`  Changes protection on a memory region.
+- `NtCreateEvent(eventHandle *uintptr, desiredAccess uintptr, objectAttributes uintptr, eventType uintptr, initialState bool) (uint32, error)`  Creates a kernel event object.
+- `NtSetEvent(eventHandle uintptr, previousState *uintptr) (uint32, error)`  Sets (signals) a kernel event.
+- `NtCreateThreadEx(threadHandle *uintptr, desiredAccess uintptr, objectAttributes uintptr, processHandle uintptr, startAddress uintptr, parameter uintptr, createFlags uintptr, stackZeroBits uintptr, stackCommitSize uintptr, stackReserveSize uintptr, attributeList uintptr) (uint32, error)`  Creates a native Windows thread
+- `NtWaitForSingleObject(handle uintptr, alertable bool, timeout *int64) (uint32, error)`  Waits on a kernel object.
 
+> **note**  
 > note - unlike the previous architecture, all calls now use a single persistent worker thread. this provides massive performance and opsec improvements over spawning individual threads per call.
