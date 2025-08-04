@@ -51,7 +51,7 @@ func testGetCurrentProcessId() {
 	}
 	
 	// Manual call
-	manualResult, manualErr := wincall.CallInNewThread(funcAddr)
+	manualResult, manualErr := wincall.CallWorker(funcAddr)
 	fmt.Printf("\n  Manual call result: %d, err: %v\n", manualResult, manualErr)
 	
 	// High-level call
