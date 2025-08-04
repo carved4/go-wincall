@@ -112,4 +112,6 @@ wincall.CallWorker(
 - `NtWaitForSingleObject(handle uintptr, alertable bool, timeout *int64) (uint32, error)` - waits on a kernel object.
 
 > **note**  
-> note - unlike the previous architecture, all calls now use a single persistent worker thread. this provides massive performance and opsec improvements over spawning individual threads per call.
+> unlike the previous architecture, all calls now use a single persistent worker thread. this provides massive performance and opsec improvements over spawning individual threads per call.
+> "single thread" in this context doesnt mean our PID has one thread, as go runtime spawns multiple threads on init, this is unavoidable
+however, every winapi call made though this library will be under the same thread :)  
