@@ -18,7 +18,7 @@ func main() {
 	wincall.LoadLibraryW("kerberos.dll")
 	wincall.LoadLibraryW("msvcrt.dll")
 	exampleHighLevel()
-	exampleManual()
+	exampleManual()	
 }
 // high level api usage :3
 func exampleHighLevel() {

@@ -70,6 +70,24 @@ func NtReadVirtualMemory(processHandle uintptr, baseAddress uintptr, buffer uint
 	return uint32(ret), nil
 }
 
+func NtProtectVirtualMemory(processHandle uintptr, baseAddress *uintptr, regionSize *uintptr, newProtect uintptr, oldProtect *uintptr) (uint32, error) {
+	syscallNum, syscallAddr := resolve.GetSyscallAndAddress(obf.GetHash("NtProtectVirtualMemory"))
+	if syscallNum == 0 {
+		return 0xC0000139, fmt.Errorf("failed to resolve NtProtectVirtualMemory")
+	}
+	ret, err := syscall.IndirectSyscall(syscallNum, syscallAddr,
+		processHandle,
+		uintptr(unsafe.Pointer(baseAddress)),
+		uintptr(unsafe.Pointer(regionSize)),
+		newProtect,
+		uintptr(unsafe.Pointer(oldProtect)),
+	)
+	if err != nil {
+		return uint32(ret), err
+	}
+	return uint32(ret), nil
+}
+
 func NtCreateEvent(eventHandle *uintptr, desiredAccess uintptr, objectAttributes uintptr, eventType uintptr, initialState bool) (uint32, error) {
     syscallNum, syscallAddr := resolve.GetSyscallAndAddress(obf.GetHash("NtCreateEvent"))
     if syscallNum == 0 {
@@ -244,9 +262,5 @@ func (w *Worker) QueueTask(funcAddr uintptr, args ...uintptr) (uintptr, error) {
 	}
 
 	result := w.retrieveResultFromSharedMem()
-	w.Set(task, result)
-
-	// the worker thread will process it. we just wait for the result.
-	finalResult := <-task.completion
-	return finalResult, nil
+	return result, nil
 }
