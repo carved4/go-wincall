@@ -34,6 +34,8 @@ func exampleHighLevel() {
 }
 // manual usage
 func exampleManual() {
+	// load explicitly so its in our PEB LDR for GetModuleBase() to succeed :3
+	wincall.LoadLibraryW("user32.dll")
 	dllHash := wincall.GetHash("user32.dll")
 	moduleBase := wincall.GetModuleBase(dllHash)
 	
