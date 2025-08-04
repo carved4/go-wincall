@@ -146,22 +146,7 @@ func (w *Worker) retrieveResultFromSharedMem() uintptr {
 	w.sharedMemMtx.Lock()
 	defer w.sharedMemMtx.Unlock()
 
-	var result uintptr
-	var bytesRead uintptr
+	result := *(*uintptr)(unsafe.Pointer(w.sharedMem + 24))
 	
-	// read the r1 field from the libcall struct in shared memory.
-	// the offset of r1 is 24 bytes.
-	status, err := NtReadVirtualMemory(
-		0xFFFFFFFFFFFFFFFF, // Current process
-		w.sharedMem+24,      // Address of the r1 field
-		uintptr(unsafe.Pointer(&result)),
-		unsafe.Sizeof(result),
-		&bytesRead,
-	)
-
-	if err != nil || status != 0 || bytesRead != unsafe.Sizeof(result) {
-		panic(fmt.Sprintf("fatal: NtReadVirtualMemory failed in worker: status=0x%x, err=%v", status, err))
-	}
-
 	return result
 }

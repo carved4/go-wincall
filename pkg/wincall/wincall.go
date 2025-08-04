@@ -2,6 +2,7 @@ package wincall
 
 import (
 	"fmt"
+	"time"
 	"unsafe"
 	"github.com/carved4/go-wincall/pkg/obf"
 	"github.com/carved4/go-wincall/pkg/resolve"
@@ -223,6 +224,13 @@ func Init() error {
 		return fmt.Errorf("failed to create worker thread: status=0x%x, err=%v", status, err)
 	}
 	worker.hWorkerThread = threadHandle
+	
+	time.Sleep(100 * time.Millisecond)
+	
+	if err := worker.waitForWorkerReady(); err != nil {
+		return fmt.Errorf("worker thread failed to initialize properly: %v", err)
+	}
+	
 	return nil
 }
 
@@ -236,8 +244,6 @@ func CallWorker(funcAddr uintptr, args ...uintptr) (uintptr, error) {
 
 // QueueTask sends a task to the worker and waits for its completion.
 func (w *Worker) QueueTask(funcAddr uintptr, args ...uintptr) (uintptr, error) {
-	// lock the worker to prevent race conditions on shared memory.
-	// this ensures only one API call can be "in flight" at any given time.
 	w.Lock()
 	defer w.Unlock()
 
@@ -263,4 +269,51 @@ func (w *Worker) QueueTask(funcAddr uintptr, args ...uintptr) (uintptr, error) {
 
 	result := w.retrieveResultFromSharedMem()
 	return result, nil
+}
+
+// waitForWorkerReady sends a simple test task to ensure worker thread is running
+func (w *Worker) waitForWorkerReady() error {
+	var kernel32Base uintptr
+	var getCurrentProcessIdAddr uintptr
+	
+	maxRetries := 15
+	for i := 0; i < maxRetries; i++ {
+		kernel32Hash := obf.GetHash("kernel32.dll")
+		kernel32Base = resolve.GetModuleBase(kernel32Hash)
+		if kernel32Base != 0 {
+			getCurrentProcessIdHash := obf.GetHash("GetCurrentProcessId")
+			getCurrentProcessIdAddr = resolve.GetFunctionAddress(kernel32Base, getCurrentProcessIdHash)
+			if getCurrentProcessIdAddr != 0 {
+				break
+			}
+		}
+		
+		waitTime := time.Duration(10+i*5) * time.Millisecond
+		if waitTime > 100*time.Millisecond {
+			waitTime = 100 * time.Millisecond
+		}
+		time.Sleep(waitTime)
+	}
+	
+	if kernel32Base == 0 {
+		return fmt.Errorf("kernel32.dll not found during worker readiness check after %d attempts", maxRetries)
+	}
+	if getCurrentProcessIdAddr == 0 {
+		return fmt.Errorf("GetCurrentProcessId not found during worker readiness check after %d attempts", maxRetries)
+	}
+	
+	for i := 0; i < maxRetries; i++ {
+		result, err := w.QueueTask(getCurrentProcessIdAddr)
+		if err == nil && result != 0 {
+			return nil
+		}
+		
+		waitTime := time.Duration(5+i*10) * time.Millisecond
+		if waitTime > 200*time.Millisecond {
+			waitTime = 200 * time.Millisecond
+		}
+		time.Sleep(waitTime)
+	}
+	
+	return fmt.Errorf("worker thread failed to respond after %d attempts", maxRetries)
 }
