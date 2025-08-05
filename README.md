@@ -27,19 +27,6 @@ the framework avoids high-level Windows APIs for its setup and execution. Module
 
 the library provides two main approaches for calling windows apis: a high-level convenience function and manual resolution for more control.
 
-
-```go
-import (
-	"unsafe"
-	"github.com/carved4/go-wincall"
-	"runtime/debug"
-)
-
-func main() {
-	// disable gc to prevent collection of utf16 string or similar buffers we need throughout
-	debug.SetGCPercent(-1)}
-```
-
 ### high-level api
 
 the `Call` function handles dll loading, function resolution, and execution automatically:
