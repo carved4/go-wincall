@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"unsafe"
 	"github.com/carved4/go-wincall"
 	"runtime/debug"
@@ -22,6 +23,16 @@ func main() {
 }
 // high level api usage :3
 func exampleHighLevel() {
+	// get system window background color (COLOR_WINDOW = 5)
+	color, _ := wincall.Call("user32", "GetSysColor", 5)
+
+	// decode RGB components from the packed color value
+	r := wincall.ExtractByte(color, 0)
+	g := wincall.ExtractByte(color, 1)    
+	b := wincall.ExtractByte(color, 2)  
+
+	fmt.Printf("window color: rgb(%d, %d, %d) = #%02X%02X%02X\n", r, g, b, r, g, b)
+	
 	title, _ := wincall.UTF16ptr("high level api")
 	message, _ := wincall.UTF16ptr("twitter.com/owengsmt")
 	

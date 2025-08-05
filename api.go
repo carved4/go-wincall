@@ -80,3 +80,50 @@ func NtCreateThreadEx(threadHandle *uintptr, desiredAccess uintptr, objectAttrib
 func NtWaitForSingleObject(handle uintptr, alertable bool, timeout *int64) (uint32, error) {
 	return wincall.NtWaitForSingleObject(handle, alertable, timeout)
 }
+
+
+
+// Generic bit manipulation helpers for unpacking most Windows API return values
+
+// ExtractByte extracts a specific byte from a return value
+// byteIndex: 0=lowest byte, 1=second byte, etc.
+// Example: ExtractByte(result, 0) gets bits 0-7
+func ExtractByte(value uintptr, byteIndex int) uint8 {
+	return uint8((value >> (byteIndex * 8)) & 0xFF)
+}
+
+// ExtractWord extracts a specific 16-bit word from a return value  
+// wordIndex: 0=low word (bits 0-15), 1=high word (bits 16-31)
+func ExtractWord(value uintptr, wordIndex int) uint16 {
+	return uint16((value >> (wordIndex * 16)) & 0xFFFF)
+}
+
+// ExtractBits extracts arbitrary bit range from a return value
+// startBit: starting bit position (0-based from right)
+// numBits: number of bits to extract (1-32)
+// Example: ExtractBits(result, 8, 4) gets bits 8-11
+func ExtractBits(value uintptr, startBit, numBits int) uint32 {
+	mask := (uint32(1) << numBits) - 1
+	return uint32(value>>startBit) & mask
+}
+
+// CombineWords combines two 16-bit words into 32-bit value
+func CombineWords(low, high uint16) uint32 {
+	return uint32(high)<<16 | uint32(low)
+}
+
+// CombineBytes combines four bytes into 32-bit value  
+func CombineBytes(b0, b1, b2, b3 uint8) uint32 {
+	return uint32(b3)<<24 | uint32(b2)<<16 | uint32(b1)<<8 | uint32(b0)
+}
+
+// CombineDwords combines two 32-bit values into 64-bit
+func CombineDwords(low, high uint32) uint64 {
+	return uint64(high)<<32 | uint64(low)
+}
+
+// SplitDwords splits 64-bit value into two 32-bit parts  
+func SplitDwords(value uint64) (low, high uint32) {
+	return uint32(value & 0xFFFFFFFF),
+		   uint32((value >> 32) & 0xFFFFFFFF)
+}
