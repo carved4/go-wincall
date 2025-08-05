@@ -10,9 +10,6 @@ this project is an implementation of a windows api calling convention for go. it
 go get github.com/carved4/go-wincall
 ```
 
-## note 
-always import runtime/debug and call debug.SetGCPercent(-1) to stop gc from collecting our utf16ptrfromstring buffers, fuck u google
-
 ## problem: stack probing and goroutines
 
 calling certain windows dll functions through our plan9 asm stub can result in intermittent access violation crashes, particularly when interacting with libraries compiled with msvc (e.g., `msvcrt.dll`). the root cause is a mismatch between go's stack management and the windows c runtime's expectations. many msvc-compiled functions begin with a stack probe (`_chkstk`) that requires a large, contiguous stack. go's goroutines use smaller, segmented stacks. when a dll function running on a goroutine attempts its stack probe, it accesses memory beyond the goroutine's stack limit, causing a stack overflow. using `runtime.lockosthread` is insufficient because the underlying stack is still managed by go.
@@ -21,19 +18,18 @@ calling certain windows dll functions through our plan9 asm stub can result in i
 
 the implemented solution bypasses go's thread and stack management for api calls using a single, persistent native windows thread. an indirect syscall to `ntcreatethreadex` creates one native windows thread during initialization. this os-level thread is initialized with a full-sized stack that satisfies the `_chkstk` probe and runs an infinite event loop waiting for api call requests. when a call is needed, the target function and its arguments are passed to this persistent worker thread via shared memory and event signaling. the result is retrieved after execution and synchronized back to the calling goroutine. this ensures all calls operate in an environment with a native stack while maintaining massive efficiency gains over the previous one-thread-per-call model.
 
-### technical details
+### Technical Details
 
-the framework avoids high-level windows apis for its setup and execution. module base addresses are found by walking the process environment block (`peb`) and its loader data structures. once a module like `ntdll.dll` is located in memory, its `pe` header is parsed to find the export address table (eat). function addresses are resolved by hashing exported function names and comparing them against a target hash, avoiding `loadlibrary` and `getprocaddress`. to maintain version independence, syscall numbers are not hardcoded. instead, the prologue of the target syscall function (e.g., `ntcreatethreadex`) is read to dynamically extract the syscall number from the `mov eax, <ssn>` instruction. 
+The framework avoids high-level Windows APIs for its setup and execution. Module base addresses are found by walking the Process Environment Block (`PEB`) and its loader data structures. Once a module like `ntdll.dll` is located in memory, its `PE` header is parsed to find the Export Address Table (EAT). Function addresses are resolved by hashing exported function names and comparing them against a target hash, avoiding `LoadLibrary` and `GetProcAddress`. To maintain version independence, syscall numbers are not hardcoded. Instead, the prologue of the target syscall function (e.g., `NtCreateThreadEx`) is read to dynamically extract the syscall number from the `MOV EAX, <SSN>` instruction.
 
-the persistent worker thread is created via an indirect syscall to `ntcreatethreadex` during the first api call. the worker runs an assembly loop that waits on `ntwaitforsingleobject` for task events. when a task arrives, it reads the `libcall` struct from shared memory (allocated via `ntallocatevirtualmemory`), executes the call using a `stdcall` assembly trampoline, writes the result back to shared memory, and signals completion via `ntsetevent`. arguments are copied to stable memory to prevent corruption from go's stack management. the main go program waits for completion via `ntwaitforsingleobject` before retrieving the return value. mutex synchronization ensures thread-safe access to the shared memory block.
+To maximize performance, the library heavily caches resolved addresses and syscall numbers. Module and function addresses are cached on their first resolution, and the results of `ntdll.dll`'s export table parsing are also cached to accelerate syscall number guessing for hooked functions. The cached data is stored in an obfuscated format to deter basic memory analysis. Furthermore, all necessary syscalls for the `Nt*` wrapper functions are pre-resolved once and reused for all subsequent calls, eliminating redundant lookups.
+
+The persistent worker thread is created via an indirect syscall to `NtCreateThreadEx` during the first API call. The worker runs an assembly loop that waits on `NtWaitForSingleObject` for task events. When a task arrives, it reads the `libcall` struct from shared memory (allocated via `NtAllocateVirtualMemory`), executes the call using a `stdcall` assembly trampoline, writes the result back to shared memory, and signals completion via `NtSetEvent`. Arguments are copied to stable memory to prevent corruption from Go's stack management, and task objects are recycled using a `sync.Pool` to reduce garbage collector overhead. The main Go program waits for completion via `NtWaitForSingleObject` before retrieving the return value. Mutex synchronization ensures thread-safe access to the shared memory block.
 
 ## api usage
 
 the library provides two main approaches for calling windows apis: a high-level convenience function and manual resolution for more control.
 
-### setup
-
-first, import the necessary packages and disable garbage collection to prevent collection of utf-16 string buffers:
 
 ```go
 import (
@@ -133,14 +129,14 @@ data := wincall.ExtractBits(packedValue, 16, 16)      // bits 16-31
 ### available functions
 
 #### core api functions
-- `Call(dllName, funcName string, args ...uintptr)` - high-level api call
-- `CallWorker(funcAddr uintptr, args ...uintptr)` - execute function in persistent native thread
-- `LoadLibraryW(dllName string)` - load dll and return base address
-- `GetProcAddress(moduleBase uintptr, funcName string)` - get function address
-- `UTF16ptr(s string)` - convert go string to utf-16 pointer
-- `GetModuleBase(dllHash uint32)` - get module base from hash
-- `GetFunctionAddress(moduleBase uintptr, funcHash uint32)` - get function address from hash
-- `GetHash(s string)` - generate djb2 hash for string
+- `Call(dllName, funcName string, args ...uintptr) (uintptr, error)` - high-level api call
+- `CallWorker(funcAddr uintptr, args ...uintptr) (uintptr, error)` - execute function in persistent native thread
+- `LoadLibraryW(dllName string) uintptr` - load dll and return base address
+- `GetProcAddress(moduleHandle uintptr, procName *byte) uintptr` - get function address (procName must be a null-terminated string pointer)
+- `UTF16ptr(s string) (*uint16, error)` - convert go string to utf-16 pointer
+- `GetModuleBase(dllHash uint32) uintptr` - get module base from hash
+- `GetFunctionAddress(moduleBase uintptr, funcHash uint32) uintptr` - get function address from hash
+- `GetHash(s string) uint32` - generate djb2 hash for string
 
 #### return value decoding utilities
 - `ExtractByte(value uintptr, byteIndex int) uint8` - extract specific byte from return value
@@ -168,4 +164,4 @@ data := wincall.ExtractBits(packedValue, 16, 16)      // bits 16-31
 > **note**  
 > unlike the previous architecture, all calls now use a single persistent worker thread. this provides massive performance and opsec improvements over spawning individual threads per call.
 > "single thread" in this context doesnt mean our PID has one thread, as go runtime spawns multiple threads on init, this is unavoidable
-> however, every winapi call made though this library will be under the same thread :)  
+> however, every winapi call made though this library will be under the same thread :)

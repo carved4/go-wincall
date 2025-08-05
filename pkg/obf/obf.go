@@ -4,7 +4,43 @@ import (
 	"log"
 	"strings"
 	"sync"
+	"encoding/binary"
 )
+
+var xorKey = []byte("meow-carved4-xor-key-change-if-u-want-to-use-this-in-your-own-project")
+
+func SetXORKey(key string) {
+	if len(key) == 0 {
+		return 
+	}
+	xorKey = []byte(key)
+}
+
+func Encode(data []byte) []byte {
+	encoded := make([]byte, len(data))
+	for i := 0; i < len(data); i++ {
+		encoded[i] = data[i] ^ xorKey[i%len(xorKey)]
+	}
+	return encoded
+}
+
+func Decode(encoded []byte) []byte {
+	return Encode(encoded) // XOR is symmetric
+}
+
+func EncodeUintptr(ptr uintptr) []byte {
+	buf := make([]byte, 8)
+	binary.LittleEndian.PutUint64(buf, uint64(ptr))
+	return Encode(buf)
+}
+
+func DecodeUintptr(encoded []byte) uintptr {
+	decoded := Decode(encoded)
+	if len(decoded) < 8 {
+		return 0
+	}
+	return uintptr(binary.LittleEndian.Uint64(decoded))
+}
 
 func DBJ2HashStr(s string) uint32 {
 	return DBJ2Hash([]byte(s))
@@ -136,42 +172,4 @@ func GetHashCacheStats() map[string]interface{} {
 		"collisions":      collisions,
 		"cache_hit_ratio": 0.0,
 	}
-}
-
-var EncodingCache = make(map[uint32]string)
-var encodingCacheMutex sync.RWMutex
-
-func Encode(s string) uint32 {
-	key := DBJ2HashStr(s)
-
-	encodingCacheMutex.Lock()
-	EncodingCache[key] = s
-	encodingCacheMutex.Unlock()
-
-	return key
-}
-
-func Decode(encoded uint32) string {
-	encodingCacheMutex.RLock()
-	defer encodingCacheMutex.RUnlock()
-
-	if original, exists := EncodingCache[encoded]; exists {
-		return original
-	}
-
-	return ""
-}
-
-func PreloadEncodings(strings []string) []uint32 {
-	encoded := make([]uint32, len(strings))
-	for i, s := range strings {
-		encoded[i] = Encode(s)
-	}
-	return encoded
-}
-
-func ClearEncodingCache() {
-	encodingCacheMutex.Lock()
-	defer encodingCacheMutex.Unlock()
-	EncodingCache = make(map[uint32]string)
 }

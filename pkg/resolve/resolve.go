@@ -1,12 +1,25 @@
 package resolve
 
 import (
+	"fmt"
+	"sort"
+	"sync"
 	"time"
 	"unsafe"
-	"github.com/carved4/go-wincall/pkg/obf"
-	"sort"
-	"fmt"
+
 	"github.com/Binject/debug/pe"
+	"github.com/carved4/go-wincall/pkg/obf"
+)
+
+var (
+	moduleCache       = make(map[uint32][]byte)
+	moduleCacheMutex  sync.RWMutex
+	functionCache     = make(map[string][]byte)
+	functionCacheMutex sync.RWMutex
+	syscallCache      = make(map[uint32]uint16)
+	syscallCacheMutex sync.RWMutex
+	sortedExports     []pe.Export
+	sortedExportsOnce sync.Once
 )
 
 type LIST_ENTRY struct {
@@ -89,6 +102,13 @@ func GetCurrentProcessPEB() *PEB {
 }
 
 func GetModuleBase(moduleHash uint32) uintptr {
+	moduleCacheMutex.RLock()
+	if encodedBase, ok := moduleCache[moduleHash]; ok {
+		moduleCacheMutex.RUnlock()
+		return obf.DecodeUintptr(encodedBase)
+	}
+	moduleCacheMutex.RUnlock()
+
 	maxRetries := 5
 	var moduleBase uintptr
 
@@ -138,10 +158,25 @@ func GetModuleBase(moduleHash uint32) uintptr {
 		time.Sleep(100 * time.Millisecond)
 	}
 
+	if moduleBase != 0 {
+		encodedBase := obf.EncodeUintptr(moduleBase)
+		moduleCacheMutex.Lock()
+		moduleCache[moduleHash] = encodedBase
+		moduleCacheMutex.Unlock()
+	}
+
 	return moduleBase
 }
 
 func GetFunctionAddress(moduleBase uintptr, functionHash uint32) uintptr {
+	cacheKey := fmt.Sprintf("%d-%d", moduleBase, functionHash)
+	functionCacheMutex.RLock()
+	if encodedAddr, ok := functionCache[cacheKey]; ok {
+		functionCacheMutex.RUnlock()
+		return obf.DecodeUintptr(encodedAddr)
+	}
+	functionCacheMutex.RUnlock()
+
 	if moduleBase == 0 {
 		return 0
 	}
@@ -176,23 +211,37 @@ func GetFunctionAddress(moduleBase uintptr, functionHash uint32) uintptr {
 		return 0
 	}
 
+	var funcAddr uintptr
 	for _, export := range exports {
 		if export.Name != "" {
 			currentHash := obf.GetHash(export.Name)
 			if currentHash == functionHash {
-				return moduleBase + uintptr(export.VirtualAddress)
+				funcAddr = moduleBase + uintptr(export.VirtualAddress)
+				break
 			}
 		}
 	}
 
-	return 0
+	if funcAddr != 0 {
+		encodedAddr := obf.EncodeUintptr(funcAddr)
+		functionCacheMutex.Lock()
+		functionCache[cacheKey] = encodedAddr
+		functionCacheMutex.Unlock()
+	}
+
+	return funcAddr
 }
 
 func GetSyscallNumber(functionHash uint32) uint16 {
-	// Get the base address of ntdll.dll using PEB walking (no LoadLibrary)
+	syscallCacheMutex.RLock()
+	if num, ok := syscallCache[functionHash]; ok {
+		syscallCacheMutex.RUnlock()
+		return num
+	}
+	syscallCacheMutex.RUnlock()
+
 	ntdllHash := obf.GetHash("ntdll.dll")
 	
-	// Add retry mechanism with exponential backoff
 	var ntdllBase uintptr
 	maxRetries := 8
 	baseDelay := 50 * time.Millisecond
@@ -203,7 +252,6 @@ func GetSyscallNumber(functionHash uint32) uint16 {
 			break
 		}
 		
-		// Exponential backoff
 		delay := baseDelay * time.Duration(1<<uint(i))
 		if delay > 2*time.Second {
 			delay = 2 * time.Second
@@ -216,7 +264,6 @@ func GetSyscallNumber(functionHash uint32) uint16 {
 		return 0
 	}
 	
-	// Get the address of the syscall function using PE parsing (no GetProcAddress)
 	var funcAddr uintptr
 	
 	for i := 0; i < maxRetries; i++ {
@@ -225,7 +272,6 @@ func GetSyscallNumber(functionHash uint32) uint16 {
 			break
 		}
 		
-		// Exponential backoff
 		delay := baseDelay * time.Duration(1<<uint(i))
 		if delay > 2*time.Second {
 			delay = 2 * time.Second
@@ -238,8 +284,14 @@ func GetSyscallNumber(functionHash uint32) uint16 {
 		return 0
 	}
 
-	// Enhanced syscall stub validation and extraction
 	syscallNumber := extractSyscallNumberWithValidation(funcAddr, functionHash)
+
+	if syscallNumber != 0 {
+		syscallCacheMutex.Lock()
+		syscallCache[functionHash] = syscallNumber
+		syscallCacheMutex.Unlock()
+	}
+
 	return syscallNumber
 }
 
@@ -447,41 +499,54 @@ func GetSyscallWithValidation(functionHash uint32) (uint16, bool, error) {
 	return syscallNum, isValid, nil
 }
 
+func getSortedExports() []pe.Export {
+	sortedExportsOnce.Do(func() {
+		ntdllBase := GetModuleBase(obf.GetHash("ntdll.dll"))
+		if ntdllBase == 0 {
+			return
+		}
+
+		dosHeader := (*[2]byte)(unsafe.Pointer(ntdllBase))
+		if dosHeader[0] != 'M' || dosHeader[1] != 'Z' {
+			return
+		}
+
+		peOffset := *(*uint32)(unsafe.Pointer(ntdllBase + 0x3C))
+		file := (*[1024]byte)(unsafe.Pointer(ntdllBase + uintptr(peOffset)))
+		if file[0] != 'P' || file[1] != 'E' {
+			return
+		}
+
+		sizeOfImage := *(*uint32)(unsafe.Pointer(ntdllBase + uintptr(peOffset) + 24 + 56))
+		slice := unsafe.Slice((*byte)(unsafe.Pointer(ntdllBase)), sizeOfImage)
+		peFile, err := pe.NewFileFromMemory(&memoryReaderAt{data: slice})
+		if err != nil {
+			return
+		}
+		exports, err := peFile.Exports()
+		if err != nil {
+			return
+		}
+		sort.Slice(exports, func(i, j int) bool {
+			return exports[i].VirtualAddress < exports[j].VirtualAddress
+		})
+		sortedExports = exports
+	})
+	return sortedExports
+}
+
 // GuessSyscallNumber attempts to infer a syscall number for a hooked function
 // by finding clean left and right neighbors and interpolating the missing number.
 func GuessSyscallNumber(targetHash uint32) uint16 {
+	exports := getSortedExports()
+	if len(exports) == 0 {
+		return 0
+	}
+	
 	ntdllBase := GetModuleBase(obf.GetHash("ntdll.dll"))
 	if ntdllBase == 0 {
 		return 0
 	}
-
-	// Parse exports from NTDLL
-	dosHeader := (*[2]byte)(unsafe.Pointer(ntdllBase))
-	if dosHeader[0] != 'M' || dosHeader[1] != 'Z' {
-		return 0
-	}
-
-	peOffset := *(*uint32)(unsafe.Pointer(ntdllBase + 0x3C))
-	file := (*[1024]byte)(unsafe.Pointer(ntdllBase + uintptr(peOffset)))
-	if file[0] != 'P' || file[1] != 'E' {
-		return 0
-	}
-
-	sizeOfImage := *(*uint32)(unsafe.Pointer(ntdllBase + uintptr(peOffset) + 24 + 56))
-	slice := unsafe.Slice((*byte)(unsafe.Pointer(ntdllBase)), sizeOfImage)
-	peFile, err := pe.NewFileFromMemory(&memoryReaderAt{data: slice})
-	if err != nil {
-		return 0
-	}
-	exports, err := peFile.Exports()
-	if err != nil {
-		return 0
-	}
-
-	// Sort exports by address
-	sort.Slice(exports, func(i, j int) bool {
-		return exports[i].VirtualAddress < exports[j].VirtualAddress
-	})
 
 	// Find the target function
 	targetIndex := -1

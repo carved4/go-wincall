@@ -4,25 +4,28 @@ import (
 	"fmt"
 	"unicode/utf16"
 	"unsafe"
+
 	"github.com/carved4/go-wincall/pkg/obf"
 	"github.com/carved4/go-wincall/pkg/resolve"
 	"github.com/carved4/go-wincall/pkg/wincall"
 )
 
-
 var CallWorker = wincall.CallWorker
+
 func LoadLibraryW(name string) uintptr {
 	return wincall.LoadLibraryW(name)
 }
 var GetProcAddress = wincall.GetProcAddress
+
 func UTF16PtrFromString(s string) (*uint16, error) {
 	return wincall.UTF16PtrFromString(s)
 }
 var GetModuleBase = resolve.GetModuleBase
 var GetFunctionAddress = resolve.GetFunctionAddress
 var GetHash = obf.DBJ2HashStr
-func Call(dllName, funcName string, args ...uintptr) (uintptr, error) {
-	dllHash := GetHash(dllName) 
+
+func Call(dllName, funcName string, args ...interface{}) (uintptr, error) {
+	dllHash := GetHash(dllName)
 	moduleBase := GetModuleBase(dllHash)
 	if moduleBase == 0 {
 		moduleBase = wincall.LoadLibraryW(dllName)
@@ -30,14 +33,12 @@ func Call(dllName, funcName string, args ...uintptr) (uintptr, error) {
 			return 0, fmt.Errorf("failed to load DLL: %s", dllName)
 		}
 	}
-	funcHash := GetHash(funcName) 
+	funcHash := GetHash(funcName)
 	funcAddr := GetFunctionAddress(moduleBase, funcHash)
 	if funcAddr == 0 {
 		return 0, fmt.Errorf("failed to resolve function: %s in %s", funcName, dllName)
 	}
-	
-	// Explicitly capture result to ensure proper return value propagation
-	// This prevents compiler optimization issues that can cause return value loss
+
 	result, err := wincall.CallWorker(funcAddr, args...)
 	if err != nil {
 		return 0, err
@@ -45,7 +46,7 @@ func Call(dllName, funcName string, args ...uintptr) (uintptr, error) {
 	return result, nil
 }
 
-func UTF16ptr(s string) (*uint16, error){
+func UTF16ptr(s string) (*uint16, error) {
 	ptr, err := wincall.UTF16PtrFromString(s)
 	return ptr, err
 }
@@ -83,8 +84,6 @@ func NtWaitForSingleObject(handle uintptr, alertable bool, timeout *int64) (uint
 	return wincall.NtWaitForSingleObject(handle, alertable, timeout)
 }
 
-
-
 // Generic bit manipulation helpers for unpacking most Windows API return values
 
 // ExtractByte extracts a specific byte from a return value
@@ -94,7 +93,7 @@ func ExtractByte(value uintptr, byteIndex int) uint8 {
 	return uint8((value >> (byteIndex * 8)) & 0xFF)
 }
 
-// ExtractWord extracts a specific 16-bit word from a return value  
+// ExtractWord extracts a specific 16-bit word from a return value
 // wordIndex: 0=low word (bits 0-15), 1=high word (bits 16-31)
 func ExtractWord(value uintptr, wordIndex int) uint16 {
 	return uint16((value >> (wordIndex * 16)) & 0xFFFF)
@@ -114,7 +113,7 @@ func CombineWords(low, high uint16) uint32 {
 	return uint32(high)<<16 | uint32(low)
 }
 
-// CombineBytes combines four bytes into 32-bit value  
+// CombineBytes combines four bytes into 32-bit value
 func CombineBytes(b0, b1, b2, b3 uint8) uint32 {
 	return uint32(b3)<<24 | uint32(b2)<<16 | uint32(b1)<<8 | uint32(b0)
 }
@@ -124,10 +123,10 @@ func CombineDwords(low, high uint32) uint64 {
 	return uint64(high)<<32 | uint64(low)
 }
 
-// SplitDwords splits 64-bit value into two 32-bit parts  
+// SplitDwords splits 64-bit value into two 32-bit parts
 func SplitDwords(value uint64) (low, high uint32) {
 	return uint32(value & 0xFFFFFFFF),
-		   uint32((value >> 32) & 0xFFFFFFFF)
+		uint32((value >> 32) & 0xFFFFFFFF)
 }
 
 // ReadUTF16String reads a null-terminated UTF-16 string from a memory pointer
@@ -138,7 +137,7 @@ func ReadUTF16String(ptr uintptr) string {
 	}
 	var chars []uint16
 	offset := uintptr(0)
-	
+
 	for {
 		char := *(*uint16)(unsafe.Pointer(ptr + offset))
 		if char == 0 {
@@ -146,7 +145,7 @@ func ReadUTF16String(ptr uintptr) string {
 		}
 		chars = append(chars, char)
 		offset += 2
-		
+
 		if len(chars) > 32768 {
 			break
 		}
@@ -157,46 +156,46 @@ func ReadUTF16String(ptr uintptr) string {
 // ReadANSIString reads a null-terminated ANSI string from a memory pointer
 // Used for APIs that return LPSTR/LPCSTR pointers
 func ReadANSIString(ptr uintptr) string {
-    if ptr == 0 {
-        return ""
-    }
-    
-    var bytes []byte
-    offset := uintptr(0)
-    
-    for {
-        b := *(*byte)(unsafe.Pointer(ptr + offset))
-        if b == 0 {
-            break
-        }
-        bytes = append(bytes, b)
-        offset++
-        
-        if len(bytes) > 32768 {
-            break
-        }
-    }
-    
-    return string(bytes)
+	if ptr == 0 {
+		return ""
+	}
+
+	var bytes []byte
+	offset := uintptr(0)
+
+	for {
+		b := *(*byte)(unsafe.Pointer(ptr + offset))
+		if b == 0 {
+			break
+		}
+		bytes = append(bytes, b)
+		offset++
+
+		if len(bytes) > 32768 {
+			break
+		}
+	}
+
+	return string(bytes)
 }
 
 // ReadLARGE_INTEGER reads a 64-bit value from a LARGE_INTEGER structure pointer
 func ReadLARGE_INTEGER(ptr uintptr) int64 {
-    if ptr == 0 {
-        return 0
-    }
-    return *(*int64)(unsafe.Pointer(ptr))
+	if ptr == 0 {
+		return 0
+	}
+	return *(*int64)(unsafe.Pointer(ptr))
 }
 
 // ReadBytes reads a byte array from a memory pointer
 func ReadBytes(ptr uintptr, length int) []byte {
-    if ptr == 0 || length <= 0 {
-        return nil
-    }
-    
-    bytes := make([]byte, length)
-    for i := 0; i < length; i++ {
-        bytes[i] = *(*byte)(unsafe.Pointer(ptr + uintptr(i)))
-    }
-    return bytes
+	if ptr == 0 || length <= 0 {
+		return nil
+	}
+
+	bytes := make([]byte, length)
+	for i := 0; i < length; i++ {
+		bytes[i] = *(*byte)(unsafe.Pointer(ptr + uintptr(i)))
+	}
+	return bytes
 }

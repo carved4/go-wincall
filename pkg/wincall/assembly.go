@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 	"unsafe"
+
 	"github.com/carved4/go-wincall/pkg/obf"
 	"github.com/carved4/go-wincall/pkg/resolve"
 )
@@ -17,7 +18,6 @@ var (
 //go:noescape
 func wincall(libcall *libcall)
 
-
 type libcall struct {
 	fn   uintptr
 	n    uintptr
@@ -27,44 +27,47 @@ type libcall struct {
 	err  uintptr
 }
 
-
-func DirectCall(funcAddr uintptr, args ...uintptr) (uintptr, error) {
+func DirectCall(funcAddr uintptr, args ...interface{}) (uintptr, error) {
+	processedArgs := make([]uintptr, len(args))
+	for i, arg := range args {
+		processedArgs[i] = processArg(arg)
+	}
 	
 	lc := &libcall{
 		fn: funcAddr,
-		n:  uintptr(len(args)),
+		n:  uintptr(len(processedArgs)),
 	}
-	
-	if len(args) > 0 {
-		lc.args = uintptr(unsafe.Pointer(&args[0]))
+
+	if len(processedArgs) > 0 {
+		lc.args = uintptr(unsafe.Pointer(&processedArgs[0]))
 	} else {
 		lc.args = 0
 	}
-	
+
 	wincall(lc)
-	
+
 	return lc.r1, nil
 }
 
-func initAddresses() {	
+func initAddresses() {
 	maxRetries := 10
-	
+
 	for i := 0; i < maxRetries; i++ {
 		kernel32Hash := obf.GetHash("kernel32.dll")
 		kernel32Base := resolve.GetModuleBase(kernel32Hash)
-		
+
 		if kernel32Base != 0 {
 			loadLibraryWHash := obf.GetHash("LoadLibraryW")
 			loadLibraryWAddr = resolve.GetFunctionAddress(kernel32Base, loadLibraryWHash)
 
 			getProcAddressHash := obf.GetHash("GetProcAddress")
 			getProcAddressAddr = resolve.GetFunctionAddress(kernel32Base, getProcAddressHash)
-			
+
 			if loadLibraryWAddr != 0 && getProcAddressAddr != 0 {
 				return
 			}
 		}
-		
+
 		waitTime := time.Duration(10+i*10) * time.Millisecond
 		if waitTime > 100*time.Millisecond {
 			waitTime = 100 * time.Millisecond
@@ -75,32 +78,32 @@ func initAddresses() {
 
 func LoadLibraryW(name string) uintptr {
 	namePtr, _ := UTF16PtrFromString(name)
-	
-	maxRetries := 5 
-	
+
+	maxRetries := 5
+
 	for i := 0; i < maxRetries; i++ {
 		loadLibraryAddr := getLoadLibraryWAddr()
 		if loadLibraryAddr == 0 {
 			time.Sleep(time.Duration(10+i*20) * time.Millisecond)
 			continue
 		}
-		
-		r1, err := CallWorker(loadLibraryAddr, uintptr(unsafe.Pointer(namePtr)))
-		
+
+		r1, err := CallWorker(loadLibraryAddr, namePtr)
+
 		if err == nil && r1 != 0 {
 			return r1
 		}
-		
+
 		if i < maxRetries-1 {
 			time.Sleep(time.Duration(50+i*50) * time.Millisecond)
 		}
 	}
-	// we should never get here 
+	// we should never get here
 	return 0
 }
 
 func GetProcAddress(moduleHandle uintptr, proc unsafe.Pointer) uintptr {
-	r1, _ := CallWorker(getGetProcAddressAddr(), moduleHandle, uintptr(proc))
+	r1, _ := CallWorker(getGetProcAddressAddr(), moduleHandle, proc)
 	return r1
 }
 
@@ -146,4 +149,3 @@ func BytePtrFromString(s string) (*byte, error) {
 	bytes := append([]byte(s), 0)
 	return &bytes[0], nil
 }
-
