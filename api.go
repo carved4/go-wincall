@@ -2,6 +2,8 @@ package wincall
 
 import (
 	"fmt"
+	"unicode/utf16"
+	"unsafe"
 	"github.com/carved4/go-wincall/pkg/obf"
 	"github.com/carved4/go-wincall/pkg/resolve"
 	"github.com/carved4/go-wincall/pkg/wincall"
@@ -126,4 +128,75 @@ func CombineDwords(low, high uint32) uint64 {
 func SplitDwords(value uint64) (low, high uint32) {
 	return uint32(value & 0xFFFFFFFF),
 		   uint32((value >> 32) & 0xFFFFFFFF)
+}
+
+// ReadUTF16String reads a null-terminated UTF-16 string from a memory pointer
+// Used for APIs that return LPWSTR/LPCWSTR pointers like GetCommandLineW
+func ReadUTF16String(ptr uintptr) string {
+	if ptr == 0 {
+		return ""
+	}
+	var chars []uint16
+	offset := uintptr(0)
+	
+	for {
+		char := *(*uint16)(unsafe.Pointer(ptr + offset))
+		if char == 0 {
+			break
+		}
+		chars = append(chars, char)
+		offset += 2
+		
+		if len(chars) > 32768 {
+			break
+		}
+	}
+	return string(utf16.Decode(chars))
+}
+
+// ReadANSIString reads a null-terminated ANSI string from a memory pointer
+// Used for APIs that return LPSTR/LPCSTR pointers
+func ReadANSIString(ptr uintptr) string {
+    if ptr == 0 {
+        return ""
+    }
+    
+    var bytes []byte
+    offset := uintptr(0)
+    
+    for {
+        b := *(*byte)(unsafe.Pointer(ptr + offset))
+        if b == 0 {
+            break
+        }
+        bytes = append(bytes, b)
+        offset++
+        
+        if len(bytes) > 32768 {
+            break
+        }
+    }
+    
+    return string(bytes)
+}
+
+// ReadLARGE_INTEGER reads a 64-bit value from a LARGE_INTEGER structure pointer
+func ReadLARGE_INTEGER(ptr uintptr) int64 {
+    if ptr == 0 {
+        return 0
+    }
+    return *(*int64)(unsafe.Pointer(ptr))
+}
+
+// ReadBytes reads a byte array from a memory pointer
+func ReadBytes(ptr uintptr, length int) []byte {
+    if ptr == 0 || length <= 0 {
+        return nil
+    }
+    
+    bytes := make([]byte, length)
+    for i := 0; i < length; i++ {
+        bytes[i] = *(*byte)(unsafe.Pointer(ptr + uintptr(i)))
+    }
+    return bytes
 }

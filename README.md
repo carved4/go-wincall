@@ -92,8 +92,47 @@ wincall.CallWorker(
 )
 ```
 
+### return value decoding utilities
+
+windows apis often return packed data that requires decoding. the library provides generic utility functions for common return value patterns:
+
+#### packed numeric data
+```go
+// get system window background color
+color, _ := wincall.Call("user32", "GetSysColor", 5)
+
+// extract RGB components from packed color value
+r := wincall.ExtractByte(color, 0)  // red component (0-255)
+g := wincall.ExtractByte(color, 1)  // green component (0-255)  
+b := wincall.ExtractByte(color, 2)  // blue component (0-255)
+
+fmt.Printf("window color: rgb(%d, %d, %d) = #%02X%02X%02X\n", r, g, b, r, g, b)
+```
+
+#### string pointers
+```go
+// get command line as utf-16 string pointer
+commandLinePtr, _ := wincall.Call("kernel32", "GetCommandLineW")
+
+// decode utf-16 string from pointer
+commandLine := wincall.ReadUTF16String(commandLinePtr)
+fmt.Printf("command line: %s\n", commandLine)
+```
+
+#### bit field extraction
+```go
+// extract arbitrary bit ranges from any return value
+packedValue := uintptr(0x12345678)
+
+valueType := wincall.ExtractBits(packedValue, 0, 4)   // bits 0-3
+subtype := wincall.ExtractBits(packedValue, 4, 4)     // bits 4-7  
+id := wincall.ExtractBits(packedValue, 8, 8)          // bits 8-15
+data := wincall.ExtractBits(packedValue, 16, 16)      // bits 16-31
+```
+
 ### available functions
 
+#### core api functions
 - `Call(dllName, funcName string, args ...uintptr)` - high-level api call
 - `CallWorker(funcAddr uintptr, args ...uintptr)` - execute function in persistent native thread
 - `LoadLibraryW(dllName string)` - load dll and return base address
@@ -102,6 +141,21 @@ wincall.CallWorker(
 - `GetModuleBase(dllHash uint32)` - get module base from hash
 - `GetFunctionAddress(moduleBase uintptr, funcHash uint32)` - get function address from hash
 - `GetHash(s string)` - generate djb2 hash for string
+
+#### return value decoding utilities
+- `ExtractByte(value uintptr, byteIndex int) uint8` - extract specific byte from return value
+- `ExtractWord(value uintptr, wordIndex int) uint16` - extract 16-bit word from return value  
+- `ExtractBits(value uintptr, startBit, numBits int) uint32` - extract arbitrary bit range
+- `CombineWords(low, high uint16) uint32` - combine two 16-bit words into 32-bit value
+- `CombineBytes(b0, b1, b2, b3 uint8) uint32` - combine four bytes into 32-bit value
+- `CombineDwords(low, high uint32) uint64` - combine two 32-bit values into 64-bit
+- `SplitDwords(value uint64) (low, high uint32)` - split 64-bit value into two 32-bit parts
+- `ReadUTF16String(ptr uintptr) string` - read null-terminated utf-16 string from pointer
+- `ReadANSIString(ptr uintptr) string` - read null-terminated ansi string from pointer  
+- `ReadLARGE_INTEGER(ptr uintptr) int64` - read 64-bit value from large_integer pointer
+- `ReadBytes(ptr uintptr, length int) []byte` - read byte array from memory pointer
+
+#### nt syscall wrappers
 - `NtAllocateVirtualMemory(processHandle uintptr, baseAddress *uintptr, zeroBits uintptr, regionSize *uintptr, allocationType uintptr, protect uintptr) (uint32, error)` - allocates memory in a target process.
 - `NtWriteVirtualMemory(processHandle uintptr, baseAddress uintptr, buffer uintptr, numberOfBytesToWrite uintptr, numberOfBytesWritten *uintptr) (uint32, error)` - writes to memory in a target process.
 - `NtReadVirtualMemory(processHandle uintptr, baseAddress uintptr, buffer uintptr, numberOfBytesToRead uintptr, numberOfBytesRead *uintptr) (uint32, error)` -reads memory from a target process.
@@ -114,4 +168,4 @@ wincall.CallWorker(
 > **note**  
 > unlike the previous architecture, all calls now use a single persistent worker thread. this provides massive performance and opsec improvements over spawning individual threads per call.
 > "single thread" in this context doesnt mean our PID has one thread, as go runtime spawns multiple threads on init, this is unavoidable
-however, every winapi call made though this library will be under the same thread :)  
+> however, every winapi call made though this library will be under the same thread :)  
