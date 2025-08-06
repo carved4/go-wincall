@@ -218,27 +218,108 @@ func NtWaitForSingleObject(handle uintptr, alertable bool, timeout *int64) (uint
 	return uint32(ret), nil
 }
 
+func (w *Worker) encryptSharedMem() {
+	w.sharedMemMtx.Lock()
+	defer w.sharedMemMtx.Unlock()
+	
+	libcallData := make([]byte, libcallSize)
+	var bytesRead uintptr
+	status, err := NtReadVirtualMemory(
+		0xFFFFFFFFFFFFFFFF, // Current process
+		w.sharedMem,
+		uintptr(unsafe.Pointer(&libcallData[0])),
+		libcallSize,
+		&bytesRead,
+	)
+	
+	if err != nil || status != 0 || bytesRead != libcallSize {
+		return
+	}
+	
+	encryptedData := obf.Encode(libcallData)
+	
+	var bytesWritten uintptr
+	status, err = NtWriteVirtualMemory(
+		0xFFFFFFFFFFFFFFFF, // Current process
+		w.sharedMem,
+		uintptr(unsafe.Pointer(&encryptedData[0])),
+		libcallSize,
+		&bytesWritten,
+	)
+	
+	if err != nil || status != 0 || bytesWritten != libcallSize {
+		NtWriteVirtualMemory(
+			0xFFFFFFFFFFFFFFFF,
+			w.sharedMem,
+			uintptr(unsafe.Pointer(&libcallData[0])),
+			libcallSize,
+			&bytesWritten,
+		)
+	}
+}
+
+func (w *Worker) decryptSharedMem() {
+	w.sharedMemMtx.Lock()
+	defer w.sharedMemMtx.Unlock()
+	
+	encryptedData := make([]byte, libcallSize)
+	var bytesRead uintptr
+	status, err := NtReadVirtualMemory(
+		0xFFFFFFFFFFFFFFFF, // Current process
+		w.sharedMem,
+		uintptr(unsafe.Pointer(&encryptedData[0])),
+		libcallSize,
+		&bytesRead,
+	)
+	
+	if err != nil || status != 0 || bytesRead != libcallSize {
+		return
+	}
+	
+	decryptedData := obf.Decode(encryptedData)
+	
+	var bytesWritten uintptr
+	status, err = NtWriteVirtualMemory(
+		0xFFFFFFFFFFFFFFFF, // Current process
+		w.sharedMem,
+		uintptr(unsafe.Pointer(&decryptedData[0])),
+		libcallSize,
+		&bytesWritten,
+	)
+	
+	if err != nil || status != 0 || bytesWritten != libcallSize {
+		// we should never get here, kill ourselves
+		runtime.Goexit()
+	}
+}
+
 func workerDispatcher() {
 	worker := GetWorker()
 	for task := range worker.tasks {
 		worker.placeArgsInSharedMem(task)
 
+		worker.decryptSharedMem()
+
 		status, err := NtSetEvent(worker.hNewTaskEvent, nil)
 		if err != nil || status != 0 {
+			worker.encryptSharedMem()
 			task.completion <- taskResult{0, fmt.Errorf("failed to set new task event: status=0x%x, err=%v", status, err)}
 			continue
 		}
 
 		status, err = NtWaitForSingleObject(worker.hTaskDoneEvent, false, nil)
 		if err != nil || status != 0 {
+			worker.encryptSharedMem()
 			task.completion <- taskResult{0, fmt.Errorf("failed to wait for task completion: status=0x%x, err=%v", status, err)}
 			continue
 		}
 
 		result := worker.retrieveResultFromSharedMem()
+		
+		worker.encryptSharedMem()
+
 		task.completion <- taskResult{result, nil}
 
-		// After the task is done, we can allow the GC to clean up the argRefs.
 		runtime.KeepAlive(task.argRefs)
 	}
 }
@@ -248,19 +329,16 @@ func Init() error {
 	worker.threadLock.Lock()
 	defer worker.threadLock.Unlock()
 
-	// if the worker thread is already running, do nothing.
 	if worker.hWorkerThread != 0 {
 		return nil
 	}
 
-	// allocate shared memory for the libcall struct
 	if err := worker.allocSharedMem(); err != nil {
 		return fmt.Errorf("failed to initialize worker: %v", err)
 	}
 
 	resolveSyscallsOnce.Do(resolveSyscalls)
 
-	// create synchronization events.
 	status, err := NtCreateEvent(&worker.hNewTaskEvent, 0x1F0003, 0, 1, false)
 	if err != nil || status != 0 {
 		return fmt.Errorf("failed to create new task event: status=0x%x, err=%v", status, err)
@@ -271,18 +349,17 @@ func Init() error {
 		return fmt.Errorf("failed to create task done event: status=0x%x, err=%v", status, err)
 	}
 
-	// resolve and store syscall information for the worker loop.
 	worker.waitForSingleObjectNum, worker.waitForSingleObjectAddr = ntWaitForSingleObjectNum, ntWaitForSingleObjectAddr
 	worker.setEventNum, worker.setEventAddr = ntSetEventNum, ntSetEventAddr
 
 	var threadHandle uintptr
 	status, err = NtCreateThreadEx(
 		&threadHandle,
-		0x1FFFFF,                          // THREAD_ALL_ACCESS
+		0x1FFFFF,
 		0,
-		0xFFFFFFFFFFFFFFFF,                // Current process
-		wincall_get_winthread_entry_addr(), // Start address
-		uintptr(unsafe.Pointer(worker)),   // Pass the worker struct to the thread
+		0xFFFFFFFFFFFFFFFF,
+		wincall_get_winthread_entry_addr(),
+		uintptr(unsafe.Pointer(worker)),
 		0, 0, 0, 0, 0,
 	)
 
@@ -302,7 +379,6 @@ func Init() error {
 	return nil
 }
 
-// CallWorker is now a wrapper around the worker queue.
 func CallWorker(funcAddr uintptr, args ...interface{}) (uintptr, error) {
 	if err := Init(); err != nil {
 		return 0, err
@@ -310,7 +386,6 @@ func CallWorker(funcAddr uintptr, args ...interface{}) (uintptr, error) {
 	return GetWorker().QueueTask(funcAddr, args...)
 }
 
-// QueueTask sends a task to the worker and waits for its completion.
 func (w *Worker) QueueTask(funcAddr uintptr, args ...interface{}) (uintptr, error) {
 	task := taskPool.Get().(*win32Task)
 	task.fn = funcAddr
@@ -326,13 +401,11 @@ func (w *Worker) QueueTask(funcAddr uintptr, args ...interface{}) (uintptr, erro
 
 	result := <-task.completion
 
-	// It's crucial to put the task back in the pool after we're done with it.
 	taskPool.Put(task)
 
 	return result.r1, result.err
 }
 
-// waitForWorkerReady sends a simple test task to ensure worker thread is running
 func (w *Worker) waitForWorkerReady() error {
 	var kernel32Base uintptr
 	var getCurrentProcessIdAddr uintptr

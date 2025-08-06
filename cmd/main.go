@@ -8,6 +8,15 @@ import (
 )
 
 func main() {
+	wincall.LoadLibraryW("advapi32.dll")
+	wincall.LoadLibraryW("kerberos.dll")
+	wincall.LoadLibraryW("combase.dll")
+	wincall.LoadLibraryW("shell32.dll")
+	wincall.LoadLibraryW("ole32.dll")
+	wincall.LoadLibraryW("oleaut32.dll")
+	wincall.LoadLibraryW("oleacc.dll")
+	wincall.LoadLibraryW("msvcrt.dll")
+	wincall.LoadLibraryW("msvcrt.dll")
 	exampleHighLevel()
 	exampleManual()
 }

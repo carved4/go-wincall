@@ -5,9 +5,38 @@ import (
 	"strings"
 	"sync"
 	"encoding/binary"
+	"time"
+	"unsafe"
 )
 
-var xorKey = []byte("meow-carved4-xor-key-change-if-u-want-to-use-this-in-your-own-project")
+var (
+	xorKey     []byte
+	keyInitOnce sync.Once
+)
+
+func generateRuntimeKey() []byte {
+	now := time.Now()
+	seed := uint64(now.UnixNano())
+	
+	seed ^= uint64(now.Unix()) << 32
+	seed ^= uint64(now.Nanosecond()) << 16
+	seed ^= uint64(uintptr(unsafe.Pointer(&seed)))
+	seed ^= uint64(uintptr(unsafe.Pointer(&now)))
+	
+	key := make([]byte, 64)
+	for i := 0; i < len(key); i++ {
+		seed = seed*1103515245 + 12345
+		key[i] = byte(seed >> 16)
+	}
+	
+	return key
+}
+
+func initXORKey() {
+	keyInitOnce.Do(func() {
+		xorKey = generateRuntimeKey()
+	})
+}
 
 func SetXORKey(key string) {
 	if len(key) == 0 {
@@ -17,6 +46,7 @@ func SetXORKey(key string) {
 }
 
 func Encode(data []byte) []byte {
+	initXORKey()
 	encoded := make([]byte, len(data))
 	for i := 0; i < len(data); i++ {
 		encoded[i] = data[i] ^ xorKey[i%len(xorKey)]
@@ -25,7 +55,8 @@ func Encode(data []byte) []byte {
 }
 
 func Decode(encoded []byte) []byte {
-	return Encode(encoded) // XOR is symmetric
+	initXORKey()
+	return Encode(encoded)
 }
 
 func EncodeUintptr(ptr uintptr) []byte {
