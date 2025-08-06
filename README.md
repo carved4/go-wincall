@@ -10,6 +10,7 @@ this project is an implementation of a windows api calling convention for go. it
 ```bash
 go get github.com/carved4/go-wincall
 ```
+>it is still recommended to import runtime/debug and debug.SetGCPercent(-1) first in main()
 
 ## problem: stack probing and goroutines
 
