@@ -53,9 +53,11 @@ the obfuscation tool:
 - each string gets a unique decoding key derived from a master seed + string hash
 - requires adding `"github.com/carved4/go-wincall/pkg/obf"` import to files using obfuscated strings
 >may be beneficial to clone, delete main.go, and just use the pkgs or api directly from your code so you can have control over those string literals as well
+
 >use api normally, then before build cd pkg/prebuild && go run obfuscate.go
+
 >go build -v to see which need pkf/obf import added
->profit
+
 
 ### final binary preparation
 
