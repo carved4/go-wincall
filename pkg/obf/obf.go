@@ -14,6 +14,7 @@ var (
 	keyInitOnce sync.Once
 )
 
+// this is not meant to be cryptographically secure 
 func generateRuntimeKey() []byte {
 	now := time.Now()
 	seed := uint64(now.UnixNano())
