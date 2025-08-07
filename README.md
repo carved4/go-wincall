@@ -25,6 +25,44 @@ the implemented solution bypasses go's thread and stack management for api calls
 
 the framework avoids high-level Windows APIs for its setup and execution. module base addresses are found by walking the Process Environment Block (`PEB`) and its loader data structures. once a module like `ntdll.dll` is located in memory, its `PE` header is parsed to find the Export Address Table (EAT). function addresses are resolved by hashing exported function names and comparing them against a target hash, avoiding `LoadLibrary` and `GetProcAddress`. to maintain version independence, syscall numbers are not hardcoded. instead, the prologue of the target syscall function (e.g., `NtCreateThreadEx`) is read to dynamically extract the syscall number from the `MOV EAX, <SSN>` instruction. to maximize performance, the library heavily caches resolved addresses and syscall numbers. module and function addresses are cached on their first resolution, and the results of `ntdll.dll`'s export table parsing are also cached to accelerate syscall number guessing for hooked functions. the cached data is stored in an obfuscated format to deter basic memory analysis. all necessary syscalls for the `Nt*` wrapper functions are pre-resolved once and reused for all subsequent calls, eliminating redundant lookups. the persistent worker thread is created via an indirect syscall to `NtCreateThreadEx` during the first API call. the worker runs an assembly loop that waits on `NtWaitForSingleObject` for task events. when a task arrives, it reads the `libcall` struct from shared memory (allocated via `NtAllocateVirtualMemory`), executes the call using a `stdcall` assembly trampoline, writes the result back to shared memory, and signals completion via `NtSetEvent`. arguments are copied to stable memory to prevent corruption from Go's stack management, and task objects are recycled using a `sync.Pool` to reduce garbage collector overhead. the main Go program waits for completion via `NtWaitForSingleObject` before retrieving the return value. mutex synchronization ensures thread-safe access to the shared memory block.
 
+## string obfuscation (optional)
+
+the library includes an optional string obfuscation tool in `pkg/prebuild/` that replaces string literals with obfuscated byte arrays to evade static analysis. the library ships with string literals embedded in binaries that use it by default.
+
+### when to use obfuscation
+
+running the prebuild program is recommended if you're trying to evade detection from security tools that scan for obvious api strings like `"ntdll.dll"`, `"NtCreateThreadEx"`, or `"user32.dll"`.
+
+### usage
+
+```bash
+# run from project root to obfuscate all string literals
+cd pkg/prebuild
+go run obfuscate.go
+
+# or specify a directory
+go run obfuscate.go /path/to/your/project
+
+# reverse obfuscation (restore original strings if you mess up, try not to run more than once)
+go run obfuscate.go --reverse
+```
+
+the obfuscation tool:
+- scans for `GetHash("string")` patterns, `"Nt*"` strings, and `wincall.Call()` calls
+- replaces them with `obf.ObfDecodeByte([]byte{0x6c, 0x68, 0x6b}, 0x1f)` format
+- each string gets a unique decoding key derived from a master seed + string hash
+- requires adding `"github.com/carved4/go-wincall/pkg/obf"` import to files using obfuscated strings
+
+### final binary preparation
+
+after building your obfuscated binary, run the included strip script to remove github.com import strings:
+
+```bash
+./strip.sh your_binary.exe
+```
+
+**note**: the decoding keys are hardcoded in the obfuscated output for runtime decoding. this provides reasonable protection against basic static analysis while maintaining functionality.
+
 ## api usage
 
 the library provides two main approaches for calling windows apis: a high-level convenience function and manual resolution for more control.

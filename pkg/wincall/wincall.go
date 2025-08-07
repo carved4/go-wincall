@@ -1,12 +1,12 @@
 package wincall
 
 import (
-	"fmt"
 	"runtime"
 	"sync"
 	"time"
 	"unsafe"
 
+	"github.com/carved4/go-wincall/pkg/errors"
 	"github.com/carved4/go-wincall/pkg/obf"
 	"github.com/carved4/go-wincall/pkg/resolve"
 	"github.com/carved4/go-wincall/pkg/syscall"
@@ -62,7 +62,7 @@ func wincall_get_winthread_entry_addr() uintptr
 func NtAllocateVirtualMemory(processHandle uintptr, baseAddress *uintptr, zeroBits uintptr, regionSize *uintptr, allocationType uintptr, protect uintptr) (uint32, error) {
 	resolveSyscallsOnce.Do(resolveSyscalls)
 	if ntAllocateVirtualMemoryNum == 0 {
-		return 0xC0000139, fmt.Errorf("failed to resolve NtAllocateVirtualMemory")
+		return 0xC0000139, errors.New(errors.Err1)
 	}
 	ret, err := syscall.IndirectSyscall(ntAllocateVirtualMemoryNum, ntAllocateVirtualMemoryAddr,
 		processHandle,
@@ -81,7 +81,7 @@ func NtAllocateVirtualMemory(processHandle uintptr, baseAddress *uintptr, zeroBi
 func NtWriteVirtualMemory(processHandle uintptr, baseAddress uintptr, buffer uintptr, numberOfBytesToWrite uintptr, numberOfBytesWritten *uintptr) (uint32, error) {
 	resolveSyscallsOnce.Do(resolveSyscalls)
 	if ntWriteVirtualMemoryNum == 0 {
-		return 0xC0000139, fmt.Errorf("failed to resolve NtWriteVirtualMemory")
+		return 0xC0000139, errors.New(errors.Err1)
 	}
 	ret, err := syscall.IndirectSyscall(ntWriteVirtualMemoryNum, ntWriteVirtualMemoryAddr,
 		processHandle,
@@ -99,7 +99,7 @@ func NtWriteVirtualMemory(processHandle uintptr, baseAddress uintptr, buffer uin
 func NtReadVirtualMemory(processHandle uintptr, baseAddress uintptr, buffer uintptr, numberOfBytesToRead uintptr, numberOfBytesRead *uintptr) (uint32, error) {
 	resolveSyscallsOnce.Do(resolveSyscalls)
 	if ntReadVirtualMemoryNum == 0 {
-		return 0xC0000139, fmt.Errorf("failed to resolve NtReadVirtualMemory")
+		return 0xC0000139, errors.New(errors.Err1)
 	}
 	ret, err := syscall.IndirectSyscall(ntReadVirtualMemoryNum, ntReadVirtualMemoryAddr,
 		processHandle,
@@ -117,7 +117,7 @@ func NtReadVirtualMemory(processHandle uintptr, baseAddress uintptr, buffer uint
 func NtProtectVirtualMemory(processHandle uintptr, baseAddress *uintptr, regionSize *uintptr, newProtect uintptr, oldProtect *uintptr) (uint32, error) {
 	resolveSyscallsOnce.Do(resolveSyscalls)
 	if ntProtectVirtualMemoryNum == 0 {
-		return 0xC0000139, fmt.Errorf("failed to resolve NtProtectVirtualMemory")
+		return 0xC0000139, errors.New(errors.Err1)
 	}
 	ret, err := syscall.IndirectSyscall(ntProtectVirtualMemoryNum, ntProtectVirtualMemoryAddr,
 		processHandle,
@@ -135,7 +135,7 @@ func NtProtectVirtualMemory(processHandle uintptr, baseAddress *uintptr, regionS
 func NtCreateEvent(eventHandle *uintptr, desiredAccess uintptr, objectAttributes uintptr, eventType uintptr, initialState bool) (uint32, error) {
 	resolveSyscallsOnce.Do(resolveSyscalls)
 	if ntCreateEventNum == 0 {
-		return 0xC0000139, fmt.Errorf("failed to resolve NtCreateEvent")
+		return 0xC0000139, errors.New(errors.Err1)
 	}
 
 	var initialStateInt uintptr
@@ -159,7 +159,7 @@ func NtCreateEvent(eventHandle *uintptr, desiredAccess uintptr, objectAttributes
 func NtSetEvent(eventHandle uintptr, previousState *uintptr) (uint32, error) {
 	resolveSyscallsOnce.Do(resolveSyscalls)
 	if ntSetEventNum == 0 {
-		return 0xC0000139, fmt.Errorf("failed to resolve NtSetEvent")
+		return 0xC0000139, errors.New(errors.Err1)
 	}
 	ret, err := syscall.IndirectSyscall(ntSetEventNum, ntSetEventAddr,
 		eventHandle,
@@ -174,7 +174,7 @@ func NtSetEvent(eventHandle uintptr, previousState *uintptr) (uint32, error) {
 func NtCreateThreadEx(threadHandle *uintptr, desiredAccess uintptr, objectAttributes uintptr, processHandle uintptr, startAddress uintptr, parameter uintptr, createFlags uintptr, stackZeroBits uintptr, stackCommitSize uintptr, stackReserveSize uintptr, attributeList uintptr) (uint32, error) {
 	resolveSyscallsOnce.Do(resolveSyscalls)
 	if ntCreateThreadExNum == 0 {
-		return 0xC0000139, fmt.Errorf("failed to resolve NtCreateThreadEx")
+		return 0xC0000139, errors.New(errors.Err1)
 	}
 	ret, err := syscall.IndirectSyscall(ntCreateThreadExNum, ntCreateThreadExAddr,
 		uintptr(unsafe.Pointer(threadHandle)),
@@ -198,7 +198,7 @@ func NtCreateThreadEx(threadHandle *uintptr, desiredAccess uintptr, objectAttrib
 func NtWaitForSingleObject(handle uintptr, alertable bool, timeout *int64) (uint32, error) {
 	resolveSyscallsOnce.Do(resolveSyscalls)
 	if ntWaitForSingleObjectNum == 0 {
-		return 0xC0000139, fmt.Errorf("failed to resolve NtWaitForSingleObject")
+		return 0xC0000139, errors.New(errors.Err1)
 	}
 
 	var alertableFlag uintptr
@@ -303,14 +303,14 @@ func workerDispatcher() {
 		status, err := NtSetEvent(worker.hNewTaskEvent, nil)
 		if err != nil || status != 0 {
 			worker.encryptSharedMem()
-			task.completion <- taskResult{0, fmt.Errorf("failed to set new task event: status=0x%x, err=%v", status, err)}
+			task.completion <- taskResult{0, errors.New(errors.Err1)}
 			continue
 		}
 
 		status, err = NtWaitForSingleObject(worker.hTaskDoneEvent, false, nil)
 		if err != nil || status != 0 {
 			worker.encryptSharedMem()
-			task.completion <- taskResult{0, fmt.Errorf("failed to wait for task completion: status=0x%x, err=%v", status, err)}
+			task.completion <- taskResult{0, errors.New(errors.Err2)}
 			continue
 		}
 
@@ -334,19 +334,19 @@ func Init() error {
 	}
 
 	if err := worker.allocSharedMem(); err != nil {
-		return fmt.Errorf("failed to initialize worker: %v", err)
+		return errors.New(errors.Err1)
 	}
 
 	resolveSyscallsOnce.Do(resolveSyscalls)
 
 	status, err := NtCreateEvent(&worker.hNewTaskEvent, 0x1F0003, 0, 1, false)
 	if err != nil || status != 0 {
-		return fmt.Errorf("failed to create new task event: status=0x%x, err=%v", status, err)
+		return errors.New(errors.Err1)
 	}
 
 	status, err = NtCreateEvent(&worker.hTaskDoneEvent, 0x1F0003, 0, 1, false)
 	if err != nil || status != 0 {
-		return fmt.Errorf("failed to create task done event: status=0x%x, err=%v", status, err)
+		return errors.New(errors.Err1)
 	}
 
 	worker.waitForSingleObjectNum, worker.waitForSingleObjectAddr = ntWaitForSingleObjectNum, ntWaitForSingleObjectAddr
@@ -364,7 +364,7 @@ func Init() error {
 	)
 
 	if err != nil || status != 0 {
-		return fmt.Errorf("failed to create worker thread: status=0x%x, err=%v", status, err)
+		return errors.New(errors.Err1)
 	}
 	worker.hWorkerThread = threadHandle
 
@@ -373,7 +373,7 @@ func Init() error {
 	time.Sleep(100 * time.Millisecond)
 
 	if err := worker.waitForWorkerReady(); err != nil {
-		return fmt.Errorf("worker thread failed to initialize properly: %v", err)
+		return errors.New(errors.Err2)
 	}
 
 	return nil
@@ -430,10 +430,10 @@ func (w *Worker) waitForWorkerReady() error {
 	}
 
 	if kernel32Base == 0 {
-		return fmt.Errorf("kernel32.dll not found during worker readiness check after %d attempts", maxRetries)
+		return errors.New(errors.Err1)
 	}
 	if getCurrentProcessIdAddr == 0 {
-		return fmt.Errorf("GetCurrentProcessId not found during worker readiness check after %d attempts", maxRetries)
+		return errors.New(errors.Err1)
 	}
 
 	for i := 0; i < maxRetries; i++ {
@@ -449,5 +449,5 @@ func (w *Worker) waitForWorkerReady() error {
 		time.Sleep(waitTime)
 	}
 
-	return fmt.Errorf("worker thread failed to respond after %d attempts", maxRetries)
+	return errors.New(errors.Err2)
 }

@@ -1,6 +1,8 @@
 package syscall
 
-import "fmt"
+import (
+	"github.com/carved4/go-wincall/pkg/errors"
+)
 
 //go:noescape
 func do_syscall(callid uint16, argh ...uintptr) uint32
@@ -22,7 +24,7 @@ func Syscall(syscallNum uint16, args ...uintptr) (uintptr, error) {
 func IndirectSyscall(syscallNum uint16, syscallAddr uintptr, args ...uintptr) (uintptr, error) {
 	trampoline := getTrampoline(syscallAddr)
 	if trampoline == 0 {
-		return 0, fmt.Errorf("failed to find clean syscall;ret gadget in stub at 0x%X", syscallAddr)
+		return 0, errors.New(errors.Err1)
 	}
 
 	result := do_syscall_indirect(syscallNum, trampoline, args...)

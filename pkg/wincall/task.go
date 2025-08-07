@@ -1,11 +1,11 @@
 package wincall
 
 import (
-	"fmt"
 	"reflect"
 	"sync"
 	"unsafe"
 
+	"github.com/carved4/go-wincall/pkg/errors"
 	"github.com/carved4/go-wincall/pkg/obf"
 )
 
@@ -77,7 +77,7 @@ func (w *Worker) allocSharedMem() error {
 	regionSize := uintptr(libcallSize + argsBufferSize)
 	status, err := NtAllocateVirtualMemory(0xFFFFFFFFFFFFFFFF, &baseAddress, 0, &regionSize, 0x3000, 0x04)
 	if err != nil || status != 0 {
-		return fmt.Errorf("NtAllocateVirtualMemory failed for worker shared memory: status=0x%x, err=%v", status, err)
+		return errors.New(errors.Err1)
 	}
 
 	w.sharedMem = baseAddress
@@ -96,7 +96,7 @@ func (w *Worker) placeArgsInSharedMem(task *win32Task) {
 
 	if len(task.args) > 0 {
 		if len(task.args) > maxArgs {
-			panic(fmt.Sprintf("too many arguments: %d (max %d)", len(task.args), maxArgs))
+			panic(errors.New(errors.Err1))
 		}
 
 		argsSize := uintptr(len(task.args)) * unsafe.Sizeof(uintptr(0))
@@ -110,7 +110,7 @@ func (w *Worker) placeArgsInSharedMem(task *win32Task) {
 		)
 
 		if err != nil || status != 0 || bytesWritten != argsSize {
-			panic(fmt.Sprintf("fatal: NtWriteVirtualMemory failed for args: status=0x%x, err=%v", status, err))
+			panic(errors.New(errors.Err1))
 		}
 
 		lc.args = w.argsBuffer
@@ -128,7 +128,7 @@ func (w *Worker) placeArgsInSharedMem(task *win32Task) {
 	)
 
 	if err != nil || status != 0 || bytesWritten != libcallSize {
-		panic(fmt.Sprintf("fatal: NtWriteVirtualMemory failed in worker: status=0x%x, err=%v", status, err))
+		panic(errors.New(errors.Err1))
 	}
 
 	w.encryptLibcallInPlace()
@@ -200,6 +200,6 @@ func processArg(arg interface{}) uintptr {
 		}
 		return 0
 	default:
-		panic(fmt.Sprintf("unsupported argument type: %T", arg))
+		panic(errors.New(errors.Err1))
 	}
 }

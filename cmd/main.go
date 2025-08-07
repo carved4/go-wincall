@@ -8,7 +8,6 @@ import (
 	"strings"
 	"runtime"
 	"unsafe"
-
 	"github.com/carved4/go-wincall"
 )
 

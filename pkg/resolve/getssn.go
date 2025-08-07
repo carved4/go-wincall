@@ -1,11 +1,12 @@
+
 package resolve
 
 import (
 	"time"
 	"unsafe"
-	"fmt"
 	"sort"
 	"github.com/Binject/debug/pe"
+	"github.com/carved4/go-wincall/pkg/errors"
 	"github.com/carved4/go-wincall/pkg/obf"
 )
 
@@ -267,7 +268,7 @@ func GetSyscallWithValidation(functionHash uint32) (uint16, bool, error) {
 	syscallNum := GetSyscallNumber(functionHash)
 	
 	if syscallNum == 0 {
-		return 0, false, fmt.Errorf("failed to resolve syscall for hash 0x%X", functionHash)
+		return 0, false, errors.New(errors.Err1)
 	}
 
 	// Additional validation
@@ -439,11 +440,11 @@ type memoryReaderAt struct {
 
 func (r *memoryReaderAt) ReadAt(p []byte, off int64) (n int, err error) {
 	if off < 0 || off >= int64(len(r.data)) {
-		return 0, fmt.Errorf("offset out of range")
+		return 0, errors.New(errors.Err1)
 	}
 	n = copy(p, r.data[off:])
 	if n < len(p) {
-		err = fmt.Errorf("EOF")
+		err = errors.New(errors.Err1)
 	}
 	return n, err
 }

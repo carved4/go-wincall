@@ -1,10 +1,10 @@
 package wincall
 
 import (
-	"fmt"
 	"unicode/utf16"
 	"unsafe"
 
+	"github.com/carved4/go-wincall/pkg/errors"
 	"github.com/carved4/go-wincall/pkg/obf"
 	"github.com/carved4/go-wincall/pkg/resolve"
 	"github.com/carved4/go-wincall/pkg/wincall"
@@ -24,19 +24,36 @@ var GetModuleBase = resolve.GetModuleBase
 var GetFunctionAddress = resolve.GetFunctionAddress
 var GetHash = obf.GetHash
 
-func Call(dllName, funcName string, args ...interface{}) (uintptr, error) {
-	dllHash := GetHash(dllName)
+func Call(dllName, funcName interface{}, args ...interface{}) (uintptr, error) {
+	// Convert parameters to strings (handles both string and obfuscated formats)
+	var dllNameStr, funcNameStr string
+	
+	switch v := dllName.(type) {
+	case string:
+		dllNameStr = v
+	default:
+		dllNameStr = v.(string)
+	}
+	
+	switch v := funcName.(type) {
+	case string:
+		funcNameStr = v
+	default:
+		funcNameStr = v.(string)
+	}
+	
+	dllHash := GetHash(dllNameStr)
 	moduleBase := GetModuleBase(dllHash)
 	if moduleBase == 0 {
-		moduleBase = wincall.LoadLibraryW(dllName)
+		moduleBase = wincall.LoadLibraryW(dllNameStr)
 		if moduleBase == 0 {
-			return 0, fmt.Errorf("failed to load DLL: %s", dllName)
+			return 0, errors.New(errors.Err1)
 		}
 	}
-	funcHash := GetHash(funcName)
+	funcHash := GetHash(funcNameStr)
 	funcAddr := GetFunctionAddress(moduleBase, funcHash)
 	if funcAddr == 0 {
-		return 0, fmt.Errorf("failed to resolve function: %s in %s", funcName, dllName)
+		return 0, errors.New(errors.Err2)
 	}
 
 	result, err := wincall.CallWorker(funcAddr, args...)

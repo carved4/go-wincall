@@ -187,3 +187,13 @@ func GetHashCacheStats() map[string]interface{} {
 		"cache_hit_ratio": 0.0,
 	}
 }
+
+// ObfDecodeByte decodes obfuscated byte arrays used in string obfuscatio
+func ObfDecodeByte(data []byte, key byte) string {
+	result := make([]byte, len(data))
+	for i, b := range data {
+		result[i] = b ^ key ^ byte(i*3)
+	}
+	return string(result)
+}
+
