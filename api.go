@@ -22,7 +22,7 @@ func UTF16PtrFromString(s string) (*uint16, error) {
 }
 var GetModuleBase = resolve.GetModuleBase
 var GetFunctionAddress = resolve.GetFunctionAddress
-var GetHash = obf.DBJ2HashStr
+var GetHash = obf.GetHash
 
 func Call(dllName, funcName string, args ...interface{}) (uintptr, error) {
 	dllHash := GetHash(dllName)

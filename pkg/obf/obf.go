@@ -73,13 +73,28 @@ func DecodeUintptr(encoded []byte) uintptr {
 	return uintptr(binary.LittleEndian.Uint64(decoded))
 }
 
-func DBJ2HashStr(s string) uint32 {
-	return DBJ2Hash([]byte(s))
+var (
+	hashSeed     uint32
+	hashInitOnce sync.Once
+)
+
+func generateHashSeed() {
+	now := time.Now()
+	seed := uint64(now.UnixNano())
+	seed ^= uint64(now.Unix()) << 32
+	seed ^= uint64(now.Nanosecond()) << 16
+	seed ^= uint64(uintptr(unsafe.Pointer(&seed)))
+	seed ^= uint64(uintptr(unsafe.Pointer(&now)))
+	hashSeed = uint32(seed)
 }
 
-func DBJ2Hash(buffer []byte) uint32 {
-	hash := uint32(5381)
+func initHashSeed() {
+	hashInitOnce.Do(generateHashSeed)
+}
 
+func CustomHash(buffer []byte) uint32 {
+	initHashSeed()
+	var h uint32 = hashSeed
 	for _, b := range buffer {
 		if b == 0 {
 			continue
@@ -87,11 +102,9 @@ func DBJ2Hash(buffer []byte) uint32 {
 		if b >= 'a' {
 			b -= 0x20
 		}
-
-		hash = ((hash << 5) + hash) + uint32(b)
+		h = (h ^ uint32(b)) * 16777619
 	}
-
-	return hash
+	return h
 }
 
 var HashCache = make(map[string]uint32)
@@ -107,7 +120,7 @@ func GetHash(s string) uint32 {
 	}
 	hashCacheMutex.RUnlock()
 
-	hash := DBJ2HashStr(s)
+	hash := CustomHash([]byte(s))
 
 	hashCacheMutex.Lock()
 	HashCache[s] = hash
@@ -122,7 +135,7 @@ func detectHashCollision(hash uint32, newString string) {
 	collisionMutex.Lock()
 	defer collisionMutex.Unlock()
 	normalizedNew := strings.ToUpper(newString)
-	
+
 	if existingString, exists := collisionDetector[hash]; exists {
 		normalizedExisting := strings.ToUpper(existingString)
 		if normalizedExisting != normalizedNew {
@@ -136,39 +149,8 @@ func detectHashCollision(hash uint32, newString string) {
 	}
 }
 
-func FNV1AHash(buffer []byte) uint32 {
-	const (
-		fnv1aOffset = 2166136261
-		fnv1aPrime  = 16777619
-	)
-
-	hash := uint32(fnv1aOffset)
-
-	for _, b := range buffer {
-		if b == 0 {
-			continue
-		}
-
-		if b >= 'a' {
-			b -= 0x20
-		}
-
-		hash ^= uint32(b)
-		hash *= fnv1aPrime
-	}
-
-	return hash
-}
-
 func GetHashWithAlgorithm(s string, algorithm string) uint32 {
-	switch algorithm {
-	case "fnv1a":
-		return FNV1AHash([]byte(s))
-	case "dbj2":
-		fallthrough
-	default:
-		return DBJ2HashStr(s)
-	}
+	return CustomHash([]byte(s))
 }
 
 func ClearHashCache() {
