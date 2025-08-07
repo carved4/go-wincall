@@ -52,6 +52,7 @@ the obfuscation tool:
 - replaces them with `obf.ObfDecodeByte([]byte{0x6c, 0x68, 0x6b}, 0x1f)` format
 - each string gets a unique decoding key derived from a master seed + string hash
 - requires adding `"github.com/carved4/go-wincall/pkg/obf"` import to files using obfuscated strings
+>may be beneficial to clone, delete main.go, and just use the pkgs or api directly from your code so you can have control over those string literals as well
 
 ### final binary preparation
 
