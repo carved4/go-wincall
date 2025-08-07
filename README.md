@@ -1,6 +1,6 @@
 # go-wincall
 
-this project is an implementation of a windows api calling convention for go. it is an expansion of concepts from `carved4/go-native-syscall`. the library provides infrastructure to interact with the windows api without importing the `syscall` package or linking against windows libraries at compile time. it is focused on the low-level mechanics of api invocation and does not include capabilities beyond that scope.
+this project is an implementation of a windows api calling convention for go. it is an expansion of concepts from `carved4/go-native-syscall`. the library provides infrastructure to interact with the windows api without importing the `syscall` package or linking against windows libraries at compile time. it is focused on the low-level mechanics of api invocation and evasion.
 
 ## demo
 ![demo3](https://github.com/user-attachments/assets/6e5cfeb5-4eb7-46ec-b93c-0b0a324bb605)
