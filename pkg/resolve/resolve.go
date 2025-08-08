@@ -12,6 +12,34 @@ import (
 	"github.com/carved4/go-wincall/pkg/obf"
 )
 
+// API Set structures for dynamic resolution
+type API_SET_NAMESPACE struct {
+	Version    uint32
+	Size       uint32
+	Flags      uint32
+	Count      uint32
+	EntryOffset uint32
+	HashOffset uint32
+	HashFactor uint32
+}
+
+type API_SET_NAMESPACE_ENTRY struct {
+	Flags       uint32
+	NameOffset  uint32
+	NameLength  uint32
+	HashedLength uint32
+	ValueOffset uint32
+	ValueCount  uint32
+}
+
+type API_SET_VALUE_ENTRY struct {
+	Flags       uint32
+	NameOffset  uint32
+	NameLength  uint32
+	ValueOffset uint32
+	ValueLength uint32
+}
+
 var (
 	moduleCache       = make(map[uint32][]byte)
 	moduleCacheMutex  sync.RWMutex
@@ -210,6 +238,144 @@ func GetFunctionAddress(moduleBase uintptr, functionHash uint32) uintptr {
 	return funcAddr
 }
 
+func resolveApiSet(dllName string) string {
+	// If it's not an API Set DLL, return as-is
+	if !strings.HasPrefix(strings.ToLower(dllName), "api-ms-") {
+		return dllName
+	}
+
+	peb := GetCurrentProcessPEB()
+	if peb == nil || peb.ApiSetMap == 0 {
+		return dllName
+	}
+
+	apiSetMap := (*API_SET_NAMESPACE)(unsafe.Pointer(peb.ApiSetMap))
+	if apiSetMap == nil || apiSetMap.Count == 0 {
+		return dllName
+	}
+
+	// Convert DLL name to UTF-16 for comparison (removing .dll extension)
+	searchName := strings.ToLower(dllName)
+	if strings.HasSuffix(searchName, ".dll") {
+		searchName = searchName[:len(searchName)-4]
+	}
+
+	// Get the first entry
+	entryPtr := uintptr(unsafe.Pointer(apiSetMap)) + uintptr(apiSetMap.EntryOffset)
+	
+	for i := uint32(0); i < apiSetMap.Count; i++ {
+		entry := (*API_SET_NAMESPACE_ENTRY)(unsafe.Pointer(entryPtr + uintptr(i)*unsafe.Sizeof(API_SET_NAMESPACE_ENTRY{})))
+		
+		// Read the API Set name
+		namePtr := uintptr(unsafe.Pointer(apiSetMap)) + uintptr(entry.NameOffset)
+		nameBytes := (*[256]uint16)(unsafe.Pointer(namePtr))
+		nameLen := entry.NameLength / 2 // Convert from bytes to UTF-16 chars
+		
+		if nameLen > 256 {
+			continue
+		}
+		
+		// Convert to string
+		nameSlice := make([]uint16, nameLen)
+		for j := uint32(0); j < nameLen; j++ {
+			nameSlice[j] = nameBytes[j]
+		}
+		apiSetName := strings.ToLower(utils.UTF16ToString(&nameSlice[0]))
+		
+		// Check if this matches our search
+		if strings.ToLower(apiSetName) == searchName {
+			// Found match, get the value (real DLL name)
+			if entry.ValueCount == 0 {
+				continue
+			}
+			
+			valuePtr := uintptr(unsafe.Pointer(apiSetMap)) + uintptr(entry.ValueOffset)
+			value := (*API_SET_VALUE_ENTRY)(unsafe.Pointer(valuePtr))
+			
+			// Read the real DLL name
+			realDllPtr := uintptr(unsafe.Pointer(apiSetMap)) + uintptr(value.ValueOffset)
+			realDllBytes := (*[256]uint16)(unsafe.Pointer(realDllPtr))
+			realDllLen := value.ValueLength / 2
+			
+			if realDllLen > 256 {
+				continue
+			}
+			
+			realDllSlice := make([]uint16, realDllLen)
+			for j := uint32(0); j < realDllLen; j++ {
+				realDllSlice[j] = realDllBytes[j]
+			}
+			realDllName := utils.UTF16ToString(&realDllSlice[0])
+			
+			// Add .dll extension if not present
+			if !strings.HasSuffix(strings.ToLower(realDllName), ".dll") {
+				realDllName += ".dll"
+			}
+			
+			return realDllName
+		}
+	}
+
+	// If not found, try to find a similar API Set with a different version
+	// Extract the base name (without version) for fallback matching
+	// e.g., "api-ms-win-core-com-l1-1-0" -> "api-ms-win-core-com"
+	baseName := searchName
+	if idx := strings.LastIndex(searchName, "-l"); idx != -1 {
+		baseName = searchName[:idx]
+	}
+	
+	var fallbackDLL string
+	for i := uint32(0); i < apiSetMap.Count; i++ {
+		entry := (*API_SET_NAMESPACE_ENTRY)(unsafe.Pointer(entryPtr + uintptr(i)*unsafe.Sizeof(API_SET_NAMESPACE_ENTRY{})))
+		
+		// Read the API Set name
+		namePtr := uintptr(unsafe.Pointer(apiSetMap)) + uintptr(entry.NameOffset)
+		nameBytes := (*[256]uint16)(unsafe.Pointer(namePtr))
+		nameLen := entry.NameLength / 2
+		
+		if nameLen > 0 && nameLen < 100 {
+			nameSlice := make([]uint16, nameLen)
+			for j := uint32(0); j < nameLen; j++ {
+				nameSlice[j] = nameBytes[j]
+			}
+			apiSetName := strings.ToLower(utils.UTF16ToString(&nameSlice[0]))
+			
+			// Check if this is a version variant of our target
+			if strings.HasPrefix(apiSetName, baseName+"-l") {
+				
+				// Get the value (real DLL name) for this alternative
+				if entry.ValueCount > 0 {
+					valuePtr := uintptr(unsafe.Pointer(apiSetMap)) + uintptr(entry.ValueOffset)
+					value := (*API_SET_VALUE_ENTRY)(unsafe.Pointer(valuePtr))
+					
+					// Read the real DLL name
+					realDllPtr := uintptr(unsafe.Pointer(apiSetMap)) + uintptr(value.ValueOffset)
+					realDllBytes := (*[256]uint16)(unsafe.Pointer(realDllPtr))
+					realDllLen := value.ValueLength / 2
+					
+					if realDllLen > 0 && realDllLen < 256 {
+						realDllSlice := make([]uint16, realDllLen)
+						for k := uint32(0); k < realDllLen; k++ {
+							realDllSlice[k] = realDllBytes[k]
+						}
+						fallbackDLL = utils.UTF16ToString(&realDllSlice[0])
+						
+						// Add .dll extension if not present
+						if !strings.HasSuffix(strings.ToLower(fallbackDLL), ".dll") {
+							fallbackDLL += ".dll"
+						}
+						
+						return fallbackDLL
+					}
+				}
+			}
+		}
+	}
+
+	// If no fallback found, return original name
+	return dllName
+}
+
 func isForwardedExport(moduleBase, funcAddr uintptr, file *pe.File) bool {
 	if file.OptionalHeader == nil {
 		return false
@@ -256,11 +422,14 @@ func resolveForwardedExport(forwarderString string) uintptr {
 		targetDLL += ".dll"
 	}
 
-	dllHash := obf.GetHash(targetDLL)
+	// Handle API Set DLLs - resolve them to their actual implementation
+	actualDLL := resolveApiSet(targetDLL)
+	
+	dllHash := obf.GetHash(actualDLL)
 	moduleBase := GetModuleBase(dllHash)
 
 	if moduleBase == 0 && loadLibraryCallback != nil {
-		loadLibraryCallback(targetDLL)
+		loadLibraryCallback(actualDLL)
 		moduleBase = GetModuleBase(dllHash)
 	}
 	
