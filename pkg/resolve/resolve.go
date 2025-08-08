@@ -22,12 +22,9 @@ var (
 	sortedExports     []pe.Export
 	sortedExportsOnce sync.Once
 	
-	// Callback to load libraries - set by higher level packages to avoid circular imports
 	loadLibraryCallback func(string) uintptr
 )
 
-// SetLoadLibraryCallback sets the callback function for loading libraries
-// This avoids circular dependencies between resolve and wincall packages
 func SetLoadLibraryCallback(callback func(string) uintptr) {
 	loadLibraryCallback = callback
 }
@@ -171,10 +168,7 @@ func GetFunctionAddress(moduleBase uintptr, functionHash uint32) uintptr {
 	var funcAddr uintptr
 	var foundExport *pe.Export
 	
-	// Check if functionHash represents an ordinal (small integer < 65536)
-	// Ordinals are typically small numbers, so we use this heuristic
 	if functionHash < 65536 {
-		// Try to find by ordinal first
 		for _, export := range exports {
 			if export.Ordinal == uint32(functionHash) {
 				foundExport = &export
@@ -183,7 +177,6 @@ func GetFunctionAddress(moduleBase uintptr, functionHash uint32) uintptr {
 		}
 	}
 	
-	// If not found by ordinal or functionHash >= 65536, try by name hash
 	if foundExport == nil {
 		for _, export := range exports {
 			if export.Name != "" {
@@ -199,7 +192,6 @@ func GetFunctionAddress(moduleBase uintptr, functionHash uint32) uintptr {
 	if foundExport != nil {
 		funcAddr = moduleBase + uintptr(foundExport.VirtualAddress)
 		
-		// Check if this is a forwarded export using pe library
 		if isForwardedExport(moduleBase, funcAddr, file) {
 			forwarderString := getForwarderString(funcAddr)
 			if resolvedAddr := resolveForwardedExport(forwarderString); resolvedAddr != 0 {
@@ -218,7 +210,6 @@ func GetFunctionAddress(moduleBase uintptr, functionHash uint32) uintptr {
 	return funcAddr
 }
 
-// isForwardedExport checks if an export is forwarded by checking if the RVA points to the export section
 func isForwardedExport(moduleBase, funcAddr uintptr, file *pe.File) bool {
 	if file.OptionalHeader == nil {
 		return false
@@ -226,7 +217,6 @@ func isForwardedExport(moduleBase, funcAddr uintptr, file *pe.File) bool {
 	
 	rva := uint32(funcAddr - moduleBase)
 	
-	// Check export directory from data directories
 	if oh64, ok := file.OptionalHeader.(*pe.OptionalHeader64); ok {
 		exportDir := oh64.DataDirectory[pe.IMAGE_DIRECTORY_ENTRY_EXPORT]
 		return rva >= exportDir.VirtualAddress && rva < exportDir.VirtualAddress+exportDir.Size
@@ -238,12 +228,11 @@ func isForwardedExport(moduleBase, funcAddr uintptr, file *pe.File) bool {
 	return false
 }
 
-// getForwarderString reads the forwarder string from the export address
 func getForwarderString(funcAddr uintptr) string {
 	ptr := (*byte)(unsafe.Pointer(funcAddr))
 	var result []byte
 	
-	for i := 0; i < 256; i++ { // Safety limit
+	for i := 0; i < 256; i++ { 
 		if *ptr == 0 {
 			break
 		}
@@ -254,7 +243,6 @@ func getForwarderString(funcAddr uintptr) string {
 	return string(result)
 }
 
-// resolveForwardedExport resolves a forwarded export to its actual address
 func resolveForwardedExport(forwarderString string) uintptr {
 	parts := strings.Split(forwarderString, ".")
 	if len(parts) != 2 {
@@ -267,15 +255,12 @@ func resolveForwardedExport(forwarderString string) uintptr {
 	if !strings.HasSuffix(strings.ToLower(targetDLL), ".dll") {
 		targetDLL += ".dll"
 	}
-	
-	// First, try to get the module base in case it's already loaded
+
 	dllHash := obf.GetHash(targetDLL)
 	moduleBase := GetModuleBase(dllHash)
-	
-	// If not loaded and we have a callback, try to load it
+
 	if moduleBase == 0 && loadLibraryCallback != nil {
 		loadLibraryCallback(targetDLL)
-		// Retry getting the module base after loading
 		moduleBase = GetModuleBase(dllHash)
 	}
 	
@@ -283,7 +268,6 @@ func resolveForwardedExport(forwarderString string) uintptr {
 		return 0
 	}
 
-	// Handle ordinal vs name
 	if strings.HasPrefix(targetFunction, "#") {
 		ordinalStr := targetFunction[1:]
 		ordinal, err := strconv.ParseUint(ordinalStr, 10, 32)

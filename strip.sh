@@ -11,7 +11,7 @@ fi
 
 echo "[*] Stripping github.com strings from: $BIN"
 
-strings -a -t x "$BIN" | grep 'github\.com' | while read -r offset string; do
+strings -a -t x "$BIN" | grep 'github\.com' | grep -v 'https://' | while read -r offset string; do
     offset_dec=$((16#$offset))
     strlen=${#string}
     echo "[*] Patching: $string at offset 0x$offset"
