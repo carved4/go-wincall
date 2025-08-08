@@ -319,6 +319,7 @@ func resolveApiSet(dllName string) string {
 	// If not found, try to find a similar API Set with a different version
 	// Extract the base name (without version) for fallback matching
 	// e.g., "api-ms-win-core-com-l1-1-0" -> "api-ms-win-core-com"
+ // This should work in almost all cases, and it rarely happens regardless. 
 	baseName := searchName
 	if idx := strings.LastIndex(searchName, "-l"); idx != -1 {
 		baseName = searchName[:idx]
