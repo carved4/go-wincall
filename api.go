@@ -12,6 +12,11 @@ import (
 
 var CallWorker = wincall.CallWorker
 
+func init() {
+	// Set up the LoadLibraryW callback to avoid circular dependencies
+	resolve.SetLoadLibraryCallback(wincall.LoadLibraryW)
+}
+
 func LoadLibraryW(name string) uintptr {
 	return wincall.LoadLibraryW(name)
 }
