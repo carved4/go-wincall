@@ -48,6 +48,15 @@ func (w *Worker) WaitNum() uint16 { return w.waitForSingleObjectNum }
 func (w *Worker) SetAddr() uintptr { return w.setEventAddr }
 func (w *Worker) SetNum() uint16 { return w.setEventNum }
 
+// GetWorkerThreadHandle returns the handle of the worker thread.
+// This handle can be used with GetThreadId to obtain the thread ID (TID)
+// for operations like avoiding suspension during ekko sleep.
+func (w *Worker) GetWorkerThreadHandle() uintptr {
+	w.threadLock.Lock()
+	defer w.threadLock.Unlock()
+	return w.hWorkerThread
+}
+
 func newWorker() *Worker {
 	return &Worker{
 		tasks: make(chan *win32Task, 1),
@@ -59,6 +68,16 @@ func GetWorker() *Worker {
 		w = newWorker()
 	})
 	return w
+}
+
+// GetWorkerThreadHandle is a convenience function that returns the worker thread handle
+// from the global worker instance. Returns 0 if the worker thread hasn't been created yet.
+// This handle can be used with GetThreadId to obtain the thread ID (TID).
+func GetWorkerThreadHandle() uintptr {
+	if w == nil {
+		return 0
+	}
+	return w.GetWorkerThreadHandle()
 }
 
 const libcallSize = 48

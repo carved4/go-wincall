@@ -11,6 +11,7 @@ import (
 )
 
 var CallWorker = wincall.CallWorker
+var GetWorkerThreadHandle = wincall.GetWorkerThreadHandle
 
 func init() {
 	// Set up the LoadLibraryW callback to avoid circular dependencies

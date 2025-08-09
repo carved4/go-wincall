@@ -35,7 +35,6 @@ func displayHeader() {
 
 func showMenu() {
 	scanner := bufio.NewScanner(os.Stdin)
-	
 	for {
 		fmt.Println("\nchoose an option:")
 		fmt.Println("1. custom dll/function resolver")
