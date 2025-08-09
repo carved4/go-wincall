@@ -35,6 +35,8 @@ type Worker struct {
 	waitForSingleObjectNum  uint16
 	setEventAddr            uintptr
 	setEventNum             uint16
+	nativeWorkerThreadId    uint32
+	goWorkerThreadId        uint32
 }
 
 var w *Worker
@@ -47,6 +49,8 @@ func (w *Worker) WaitAddr() uintptr { return w.waitForSingleObjectAddr }
 func (w *Worker) WaitNum() uint16 { return w.waitForSingleObjectNum }
 func (w *Worker) SetAddr() uintptr { return w.setEventAddr }
 func (w *Worker) SetNum() uint16 { return w.setEventNum }
+func (w *Worker) NativeWorkerThreadId() uint32 { return w.nativeWorkerThreadId }
+func (w *Worker) GoWorkerThreadId() uint32 { return w.goWorkerThreadId }
 
 func newWorker() *Worker {
 	return &Worker{

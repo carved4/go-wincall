@@ -13,23 +13,28 @@ import (
 )
 
 var (
-	ntAllocateVirtualMemoryNum   uint16
-	ntAllocateVirtualMemoryAddr  uintptr
-	ntWriteVirtualMemoryNum      uint16
-	ntWriteVirtualMemoryAddr     uintptr
-	ntReadVirtualMemoryNum       uint16
-	ntReadVirtualMemoryAddr      uintptr
-	ntProtectVirtualMemoryNum    uint16
-	ntProtectVirtualMemoryAddr   uintptr
-	ntCreateEventNum             uint16
-	ntCreateEventAddr            uintptr
-	ntSetEventNum                uint16
-	ntSetEventAddr               uintptr
-	ntCreateThreadExNum          uint16
-	ntCreateThreadExAddr         uintptr
-	ntWaitForSingleObjectNum     uint16
-	ntWaitForSingleObjectAddr    uintptr
-	resolveSyscallsOnce          sync.Once
+	ntAllocateVirtualMemoryNum     uint16
+	ntAllocateVirtualMemoryAddr    uintptr
+	ntWriteVirtualMemoryNum        uint16
+	ntWriteVirtualMemoryAddr       uintptr
+	ntReadVirtualMemoryNum         uint16
+	ntReadVirtualMemoryAddr        uintptr
+	ntProtectVirtualMemoryNum      uint16
+	ntProtectVirtualMemoryAddr     uintptr
+	ntCreateEventNum               uint16
+	ntCreateEventAddr              uintptr
+	ntSetEventNum                  uint16
+	ntSetEventAddr                 uintptr
+	ntCreateThreadExNum            uint16
+	ntCreateThreadExAddr           uintptr
+	ntWaitForSingleObjectNum       uint16
+	ntWaitForSingleObjectAddr      uintptr
+	ntQueryInformationThreadNum    uint16
+	ntQueryInformationThreadAddr   uintptr
+	ntQueryInformationProcessNum   uint16
+	ntQueryInformationProcessAddr  uintptr
+	resolveSyscallsOnce            sync.Once
+
 )
 
 func resolveSyscalls() {
@@ -41,6 +46,8 @@ func resolveSyscalls() {
 	ntSetEventNum, ntSetEventAddr = resolve.GetSyscallAndAddress(obf.GetHash("NtSetEvent"))
 	ntCreateThreadExNum, ntCreateThreadExAddr = resolve.GetSyscallAndAddress(obf.GetHash("NtCreateThreadEx"))
 	ntWaitForSingleObjectNum, ntWaitForSingleObjectAddr = resolve.GetSyscallAndAddress(obf.GetHash("NtWaitForSingleObject"))
+	ntQueryInformationThreadNum, ntQueryInformationThreadAddr = resolve.GetSyscallAndAddress(obf.GetHash("NtQueryInformationThread"))
+	ntQueryInformationProcessNum, ntQueryInformationProcessAddr = resolve.GetSyscallAndAddress(obf.GetHash("NtQueryInformationProcess"))
 }
 
 var taskPool = sync.Pool{
@@ -218,6 +225,76 @@ func NtWaitForSingleObject(handle uintptr, alertable bool, timeout *int64) (uint
 	return uint32(ret), nil
 }
 
+// ThreadBasicInformation structure for NtQueryInformationThread
+type ThreadBasicInformation struct {
+	ExitStatus      uint32
+	TebBaseAddress  uintptr
+	ClientIdProcess uintptr
+	ClientIdThread  uintptr
+	AffinityMask    uintptr
+	Priority        uint32
+	BasePriority    uint32
+}
+
+func NtQueryInformationThread(threadHandle uintptr, threadInformationClass uintptr, threadInformation uintptr, threadInformationLength uintptr, returnLength *uintptr) (uint32, error) {
+	resolveSyscallsOnce.Do(resolveSyscalls)
+	if ntQueryInformationThreadNum == 0 {
+		return 0xC0000139, errors.New(errors.Err1)
+	}
+	ret, err := syscall.IndirectSyscall(ntQueryInformationThreadNum, ntQueryInformationThreadAddr,
+		threadHandle,
+		threadInformationClass,
+		threadInformation,
+		threadInformationLength,
+		uintptr(unsafe.Pointer(returnLength)),
+	)
+	if err != nil {
+		return uint32(ret), err
+	}
+	return uint32(ret), nil
+}
+
+func GetCurrentThreadId() (uint32, error) {
+	// Get current thread handle
+	const getCurrentThread = uintptr(0xFFFFFFFFFFFFFFFE) // Current thread pseudo-handle
+	const threadBasicInformation = 0
+	
+	var tbi ThreadBasicInformation
+	var returnLength uintptr
+	
+	status, err := NtQueryInformationThread(
+		getCurrentThread,
+		threadBasicInformation,
+		uintptr(unsafe.Pointer(&tbi)),
+		uintptr(unsafe.Sizeof(tbi)),
+		&returnLength,
+	)
+	
+	if err != nil || status != 0 {
+		return 0, errors.New(errors.Err1)
+	}
+	
+	return uint32(tbi.ClientIdThread), nil
+}
+
+func NtQueryInformationProcess(processHandle uintptr, processInformationClass uintptr, processInformation uintptr, processInformationLength uintptr, returnLength *uintptr) (uint32, error) {
+	resolveSyscallsOnce.Do(resolveSyscalls)
+	if ntQueryInformationProcessNum == 0 {
+		return 0xC0000139, errors.New(errors.Err1)
+	}
+	ret, err := syscall.IndirectSyscall(ntQueryInformationProcessNum, ntQueryInformationProcessAddr,
+		processHandle,
+		processInformationClass,
+		processInformation,
+		processInformationLength,
+		uintptr(unsafe.Pointer(returnLength)),
+	)
+	if err != nil {
+		return uint32(ret), err
+	}
+	return uint32(ret), nil
+}
+
 func (w *Worker) encryptSharedMem() {
 	w.sharedMemMtx.Lock()
 	defer w.sharedMemMtx.Unlock()
@@ -295,6 +372,13 @@ func (w *Worker) decryptSharedMem() {
 
 func workerDispatcher() {
 	worker := GetWorker()
+	
+	// Get the current Go worker thread ID
+	threadId, err := GetCurrentThreadId()
+	if err == nil {
+		worker.goWorkerThreadId = threadId
+	}
+	
 	for task := range worker.tasks {
 		worker.placeArgsInSharedMem(task)
 
@@ -376,6 +460,11 @@ func Init() error {
 		return errors.New(errors.Err2)
 	}
 
+	// Get the native worker thread ID after the worker is ready
+	if err := worker.retrieveNativeWorkerThreadId(); err != nil {
+		return errors.New(errors.Err2)
+	}
+
 	return nil
 }
 
@@ -450,4 +539,35 @@ func (w *Worker) waitForWorkerReady() error {
 	}
 
 	return errors.New(errors.Err2)
+}
+
+func (w *Worker) retrieveNativeWorkerThreadId() error {
+	// Use NtQueryInformationThread to get the thread ID of the native worker thread
+	var tbi ThreadBasicInformation
+	var returnLength uintptr
+	
+	status, err := NtQueryInformationThread(
+		w.hWorkerThread,
+		0, // ThreadBasicInformation
+		uintptr(unsafe.Pointer(&tbi)),
+		uintptr(unsafe.Sizeof(tbi)),
+		&returnLength,
+	)
+	
+	if err != nil || status != 0 {
+		return errors.New(errors.Err1)
+	}
+	
+	w.nativeWorkerThreadId = uint32(tbi.ClientIdThread)
+	return nil
+}
+
+// GetWorkerThreadIds returns both the native worker thread ID and Go worker thread ID
+func GetWorkerThreadIds() (nativeThreadId uint32, goThreadId uint32, err error) {
+	if err := Init(); err != nil {
+		return 0, 0, err
+	}
+	
+	worker := GetWorker()
+	return worker.nativeWorkerThreadId, worker.goWorkerThreadId, nil
 }

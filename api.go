@@ -11,7 +11,7 @@ import (
 )
 
 var CallWorker = wincall.CallWorker
-
+var GetWorkerThreadIds = wincall.GetWorkerThreadIds
 func init() {
 	// Set up the LoadLibraryW callback to avoid circular dependencies
 	resolve.SetLoadLibraryCallback(wincall.LoadLibraryW)

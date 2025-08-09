@@ -91,7 +91,10 @@ func customResolver(scanner *bufio.Scanner) {
 		
 		fmt.Printf("\nloading %s...\n", dllName)
 		wincall.LoadLibraryW(dllName)
-		
+		nativeThreadId, goThreadId, _ := wincall.GetWorkerThreadIds()
+		fmt.Printf("native thread id: %d\n", nativeThreadId)
+		fmt.Printf("go thread id: %d\n", goThreadId)
+
 		dllHash := wincall.GetHash(dllName)
 		moduleBase := wincall.GetModuleBase(dllHash)
 		
