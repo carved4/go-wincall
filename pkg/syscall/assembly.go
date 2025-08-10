@@ -1,8 +1,5 @@
 package syscall
 
-import (
-	"github.com/carved4/go-wincall/pkg/errors"
-)
 
 //go:noescape
 func do_syscall(callid uint16, argh ...uintptr) uint32
@@ -22,9 +19,14 @@ func Syscall(syscallNum uint16, args ...uintptr) (uintptr, error) {
 }
 
 func IndirectSyscall(syscallNum uint16, syscallAddr uintptr, args ...uintptr) (uintptr, error) {
+	if syscallAddr == 0 {
+		return Syscall(syscallNum, args...)
+	}
+
 	trampoline := getTrampoline(syscallAddr)
 	if trampoline == 0 {
-		return 0, errors.New(errors.Err1)
+		// Fallback to direct syscall if no clean trampoline found
+		return Syscall(syscallNum, args...)
 	}
 
 	result := do_syscall_indirect(syscallNum, trampoline, args...)

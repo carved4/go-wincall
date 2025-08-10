@@ -13,6 +13,10 @@ import (
 
 	
 func main() {
+	wincall.UnhookNtdll()
+	if wincall.IsDebuggerPresent() {
+		os.Exit(1)
+	}
 	displayHeader()
 	showMenu()
 }

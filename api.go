@@ -1,6 +1,7 @@
 package wincall
 
 import (
+	"fmt"
 	"unicode/utf16"
 	"unsafe"
 
@@ -10,24 +11,46 @@ import (
 	"github.com/carved4/go-wincall/pkg/wincall"
 )
 
-var CallWorker = wincall.CallWorker
-var GetWorkerThreadIds = wincall.GetWorkerThreadIds
 func init() {
 	// Set up the LoadLibraryW callback to avoid circular dependencies
 	resolve.SetLoadLibraryCallback(wincall.LoadLibraryW)
 }
 
+func CallWorker(funcAddr uintptr, args ...interface{}) (uintptr, error) {
+	return wincall.CallWorker(funcAddr, args...)
+}
+
+func GetWorkerThreadIds() (nativeThreadId uint32, goThreadId uint32, err error) {
+	return wincall.GetWorkerThreadIds()
+}
+
 func LoadLibraryW(name string) uintptr {
 	return wincall.LoadLibraryW(name)
 }
-var GetProcAddress = wincall.GetProcAddress
+
+func GetProcAddress(moduleHandle uintptr, procName *byte) uintptr {
+	return wincall.GetProcAddress(moduleHandle, unsafe.Pointer(procName))
+}
 
 func UTF16PtrFromString(s string) (*uint16, error) {
 	return wincall.UTF16PtrFromString(s)
 }
-var GetModuleBase = resolve.GetModuleBase
-var GetFunctionAddress = resolve.GetFunctionAddress
-var GetHash = obf.GetHash
+
+func GetModuleBase(moduleHash uint32) uintptr {
+	return resolve.GetModuleBase(moduleHash)
+}
+
+func GetFunctionAddress(moduleBase uintptr, functionHash uint32) uintptr {
+	return resolve.GetFunctionAddress(moduleBase, functionHash)
+}
+
+func GetHash(s string) uint32 {
+	return obf.GetHash(s)
+}
+
+func IsDebuggerPresent() bool {
+	return wincall.IsDebuggerPresent()
+}
 
 func Call(dllName, funcName interface{}, args ...interface{}) (uintptr, error) {
 	// Convert parameters to strings (handles both string and obfuscated formats)
@@ -104,6 +127,22 @@ func NtCreateThreadEx(threadHandle *uintptr, desiredAccess uintptr, objectAttrib
 
 func NtWaitForSingleObject(handle uintptr, alertable bool, timeout *int64) (uint32, error) {
 	return wincall.NtWaitForSingleObject(handle, alertable, timeout)
+}
+
+// UnhookNtdll restores clean ntdll.dll from disk to remove any hooks
+func UnhookNtdll() error {
+	return resolve.UnhookNtdll()
+}
+
+// GetSyscallWithAntiHook attempts to resolve syscall with anti-hooking measures
+// Returns syscall number, trampoline address, and error
+func GetSyscallWithAntiHook(functionName string) (uint16, uintptr, error) {
+	functionHash := GetHash(functionName)
+	syscallNum, trampolineAddr := resolve.GetSyscallAndAddress(functionHash)
+	if syscallNum == 0 {
+		return 0, 0, fmt.Errorf("failed to resolve syscall for %s", functionName)
+	}
+	return syscallNum, trampolineAddr, nil
 }
 
 // Generic bit manipulation helpers for unpacking most Windows API return values

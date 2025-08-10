@@ -74,47 +74,207 @@ func GetSyscallNumber(functionHash uint32) uint16 {
 }
 
 func GetSyscallAndAddress(functionHash uint32) (uint16, uintptr) {
-	// Get the base address of ntdll.dll using PEB walking (no LoadLibrary)
+	// Try multiple strategies for hook evasion
+	return getSyscallWithAntiHook(functionHash)
+}
+
+func getSyscallWithAntiHook(functionHash uint32) (uint16, uintptr) {
 	ntdllHash := obf.GetHash("ntdll.dll")
-	
-	// Add retry mechanism
-	var ntdllBase uintptr
-	maxRetries := 5
-	
-	for i := 0; i < maxRetries; i++ {
-		ntdllBase = GetModuleBase(ntdllHash)
-		if ntdllBase != 0 {
-			break
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	
+	ntdllBase := GetModuleBase(ntdllHash)
 	if ntdllBase == 0 {
 		return 0, 0
 	}
 
-	// Get the address of the syscall function using PE parsing (no GetProcAddress)
-	var funcAddr uintptr
-	
-	for i := 0; i < maxRetries; i++ {
-		funcAddr = GetFunctionAddress(ntdllBase, functionHash)
-		if funcAddr != 0 {
-			break
+	// Strategy 1: Try the original function
+	funcAddr := GetFunctionAddress(ntdllBase, functionHash)
+	if funcAddr != 0 {
+		if syscallNum, trampolineAddr := tryExtractSyscall(funcAddr); syscallNum != 0 {
+			return syscallNum, trampolineAddr
 		}
-		time.Sleep(100 * time.Millisecond)
 	}
-	
+
+	// Strategy 2: Try Nt/Zw pair (they have identical syscall numbers)
+	if pairHash := findNtZwPair(functionHash); pairHash != 0 {
+		pairAddr := GetFunctionAddress(ntdllBase, pairHash)
+		if pairAddr != 0 {
+			if syscallNum, trampolineAddr := tryExtractSyscall(pairAddr); syscallNum != 0 {
+				return syscallNum, trampolineAddr
+			}
+		}
+	}
+
+	// Strategy 3: Use syscall number guessing with clean trampoline
+	if syscallNum := GuessSyscallNumber(functionHash); syscallNum != 0 {
+		if cleanTrampoline := findCleanSyscallTrampoline(); cleanTrampoline != 0 {
+			return syscallNum, cleanTrampoline
+		}
+		// Fallback: return SSN with 0 address (will use direct syscall)
+		return syscallNum, 0
+	}
+
+	return 0, 0
+}
+
+// tryExtractSyscall attempts to extract syscall number and find clean trampoline
+func tryExtractSyscall(funcAddr uintptr) (uint16, uintptr) {
 	if funcAddr == 0 {
 		return 0, 0
 	}
 
-	// The syscall number is at offset 4 in the syscall stub
-	syscallNumber := *(*uint16)(unsafe.Pointer(funcAddr + 4))
+	// Check if function is hooked
+	if isHooked(funcAddr) {
+		return 0, 0
+	}
+
+	// Extract syscall number using existing validation
+	syscallNum := extractSyscallNumberWithValidation(funcAddr, 0)
+	if syscallNum == 0 {
+		return 0, 0
+	}
+
+	// Find clean trampoline (syscall; ret gadget)
+	trampolineAddr := findSyscallTrampoline(funcAddr)
+	if trampolineAddr == 0 {
+		// If no clean trampoline in this function, find one elsewhere
+		trampolineAddr = findCleanSyscallTrampoline()
+	}
+
+	return syscallNum, trampolineAddr
+}
+
+// isHooked detects if a function has been hooked
+func isHooked(funcAddr uintptr) bool {
+	if funcAddr == 0 {
+		return true
+	}
+
+	// Read first 16 bytes to check for hooks
+	funcBytes := make([]byte, 16)
+	for i := 0; i < 16; i++ {
+		funcBytes[i] = *(*byte)(unsafe.Pointer(funcAddr + uintptr(i)))
+	}
+
+	// Check for common hook patterns
+	// JMP instructions at the start indicate hooks
+	if funcBytes[0] == 0xe9 || funcBytes[0] == 0xeb { // JMP near/short
+		return true
+	}
 	
-	// The syscall instruction is at offset 0x12 for x64
-	syscallInstructionAddr := funcAddr + 0x12
-	
-	return syscallNumber, syscallInstructionAddr
+	// Check for JMP indirect
+	if funcBytes[0] == 0xff && (funcBytes[1]&0xf8) == 0x20 { // JMP [mem]
+		return true
+	}
+
+	// Check for PUSH/RET combinations (common in hooks)
+	if funcBytes[0] == 0x68 { // PUSH imm32
+		return true
+	}
+
+	// Check for expected syscall stub patterns
+	// Standard pattern: 4c 8b d1 b8 XX XX 00 00 (mov r10,rcx; mov eax,XXXX)
+	if len(funcBytes) >= 8 &&
+		funcBytes[0] == 0x4c && funcBytes[1] == 0x8b && funcBytes[2] == 0xd1 &&
+		funcBytes[3] == 0xb8 {
+		return false // This looks like a clean syscall stub
+	}
+
+	// Alternative pattern: b8 XX XX 00 00 4c 8b d1 (mov eax,XXXX; mov r10,rcx)
+	if len(funcBytes) >= 8 &&
+		funcBytes[0] == 0xb8 &&
+		funcBytes[5] == 0x4c && funcBytes[6] == 0x8b && funcBytes[7] == 0xd1 {
+		return false // This also looks clean
+	}
+
+	// If we can't identify the pattern, assume it's hooked
+	return true
+}
+
+// findNtZwPair finds the Nt/Zw counterpart of a function
+func findNtZwPair(functionHash uint32) uint32 {
+	// Get all exports to find the pair
+	exports := getSortedExports()
+	if len(exports) == 0 {
+		return 0
+	}
+
+	// Find the original function name
+	var originalName string
+	for _, exp := range exports {
+		if obf.GetHash(exp.Name) == functionHash {
+			originalName = exp.Name
+			break
+		}
+	}
+
+	if originalName == "" {
+		return 0
+	}
+
+	// Generate the pair name
+	var pairName string
+	if len(originalName) >= 2 {
+		if originalName[:2] == "Nt" {
+			pairName = "Zw" + originalName[2:]
+		} else if originalName[:2] == "Zw" {
+			pairName = "Nt" + originalName[2:]
+		}
+	}
+
+	if pairName != "" {
+		return obf.GetHash(pairName)
+	}
+
+	return 0
+}
+
+// findSyscallTrampoline finds syscall;ret gadget in a function
+func findSyscallTrampoline(funcAddr uintptr) uintptr {
+	// Search for syscall;ret (0x0f 0x05 0xc3) pattern in the function
+	// Limit search to first 64 bytes of function
+	for i := uintptr(0); i < 64; i++ {
+		addr := funcAddr + i
+		if *(*byte)(unsafe.Pointer(addr)) == 0x0f &&
+			*(*byte)(unsafe.Pointer(addr+1)) == 0x05 &&
+			*(*byte)(unsafe.Pointer(addr+2)) == 0xc3 {
+			return addr
+		}
+	}
+	return 0
+}
+
+// findCleanSyscallTrampoline finds any clean syscall;ret gadget in ntdll
+func findCleanSyscallTrampoline() uintptr {
+	exports := getSortedExports()
+	if len(exports) == 0 {
+		return 0
+	}
+
+	ntdllBase := GetModuleBase(obf.GetHash("ntdll.dll"))
+	if ntdllBase == 0 {
+		return 0
+	}
+
+	// Check several known clean functions for clean trampolines
+	cleanCandidates := []string{
+		"NtQuerySystemInformation",
+		"NtQueryInformationProcess", 
+		"NtQueryVirtualMemory",
+		"NtOpenProcess",
+		"NtClose",
+	}
+
+	for _, candidate := range cleanCandidates {
+		candidateHash := obf.GetHash(candidate)
+		candidateAddr := GetFunctionAddress(ntdllBase, candidateHash)
+		
+		if candidateAddr != 0 && !isHooked(candidateAddr) {
+			if trampoline := findSyscallTrampoline(candidateAddr); trampoline != 0 {
+				return trampoline
+			}
+		}
+	}
+
+	return 0
 }
 // extractSyscallNumberWithValidation performs enhanced validation and extraction
 func extractSyscallNumberWithValidation(funcAddr uintptr, functionHash uint32) uint16 {

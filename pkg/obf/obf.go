@@ -1,10 +1,12 @@
 package obf
 
 import (
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/binary"
 	"log"
 	"strings"
 	"sync"
-	"encoding/binary"
 	"time"
 	"unsafe"
 )
@@ -14,22 +16,12 @@ var (
 	keyInitOnce sync.Once
 )
 
-// this is not meant to be cryptographically secure 
 func generateRuntimeKey() []byte {
-	now := time.Now()
-	seed := uint64(now.UnixNano())
-	
-	seed ^= uint64(now.Unix()) << 32
-	seed ^= uint64(now.Nanosecond()) << 16
-	seed ^= uint64(uintptr(unsafe.Pointer(&seed)))
-	seed ^= uint64(uintptr(unsafe.Pointer(&now)))
-	
 	key := make([]byte, 64)
-	for i := 0; i < len(key); i++ {
-		seed = seed*1103515245 + 12345
-		key[i] = byte(seed >> 16)
+	_, err := rand.Read(key)
+	if err != nil {
+		panic("failed keygen")
 	}
-	
 	return key
 }
 
@@ -75,37 +67,47 @@ func DecodeUintptr(encoded []byte) uintptr {
 }
 
 var (
-	hashSeed     uint32
+	hashSeed     [32]byte
 	hashInitOnce sync.Once
 )
 
 func generateHashSeed() {
-	now := time.Now()
-	seed := uint64(now.UnixNano())
-	seed ^= uint64(now.Unix()) << 32
-	seed ^= uint64(now.Nanosecond()) << 16
-	seed ^= uint64(uintptr(unsafe.Pointer(&seed)))
-	seed ^= uint64(uintptr(unsafe.Pointer(&now)))
-	hashSeed = uint32(seed)
+	_, err := rand.Read(hashSeed[:])
+	if err != nil {
+		hasher := sha256.New()
+		now := time.Now()
+		binary.Write(hasher, binary.LittleEndian, now.UnixNano())
+		binary.Write(hasher, binary.LittleEndian, now.Unix())
+		binary.Write(hasher, binary.LittleEndian, uintptr(unsafe.Pointer(&hasher)))
+		binary.Write(hasher, binary.LittleEndian, uintptr(unsafe.Pointer(&now)))
+		binary.Write(hasher, binary.LittleEndian, uintptr(unsafe.Pointer(&hashSeed)))
+		fallbackHash := hasher.Sum(nil)
+		copy(hashSeed[:], fallbackHash)
+	}
 }
 
 func initHashSeed() {
 	hashInitOnce.Do(generateHashSeed)
 }
 
-func CustomHash(buffer []byte) uint32 {
+func Hash(buffer []byte) uint32 {
 	initHashSeed()
-	var h uint32 = hashSeed
-	for _, b := range buffer {
+	normalized := make([]byte, len(buffer))
+	for i, b := range buffer {
 		if b == 0 {
 			continue
 		}
-		if b >= 'a' {
-			b -= 0x20
+		if b >= 'a' && b <= 'z' {
+			normalized[i] = b - 0x20
+		} else {
+			normalized[i] = b
 		}
-		h = (h ^ uint32(b)) * 16777619
 	}
-	return h
+	hasher := sha256.New()
+	hasher.Write(hashSeed[:])
+	hasher.Write(normalized)
+	fullHash := hasher.Sum(nil)
+	return binary.LittleEndian.Uint32(fullHash[:4])
 }
 
 var HashCache = make(map[string]uint32)
@@ -121,7 +123,7 @@ func GetHash(s string) uint32 {
 	}
 	hashCacheMutex.RUnlock()
 
-	hash := CustomHash([]byte(s))
+	hash := Hash([]byte(s))
 
 	hashCacheMutex.Lock()
 	HashCache[s] = hash
@@ -151,7 +153,7 @@ func detectHashCollision(hash uint32, newString string) {
 }
 
 func GetHashWithAlgorithm(s string, algorithm string) uint32 {
-	return CustomHash([]byte(s))
+	return Hash([]byte(s))
 }
 
 func ClearHashCache() {
