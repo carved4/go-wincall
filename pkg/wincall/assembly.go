@@ -1,22 +1,26 @@
 package wincall
 
 import (
-	"sync"
-	"time"
-	"unsafe"
+    "runtime"
+    "sync"
+    "time"
+    "unsafe"
 
-	"github.com/carved4/go-wincall/pkg/obf"
-	"github.com/carved4/go-wincall/pkg/resolve"
+    "github.com/carved4/go-wincall/pkg/obf"
+    "github.com/carved4/go-wincall/pkg/resolve"
 )
 
 var (
-	loadLibraryWAddr   uintptr
-	getProcAddressAddr uintptr
-	wincallOnce        sync.Once
+    loadLibraryWAddr   uintptr
+    getProcAddressAddr uintptr
+    wincallOnce        sync.Once
 )
 
 //go:noescape
 func wincall(libcall *libcall)
+
+//go:noescape
+func tidFromTeb() uint32
 
 type libcall struct {
 	fn   uintptr
@@ -28,25 +32,46 @@ type libcall struct {
 }
 
 func DirectCall(funcAddr uintptr, args ...interface{}) (uintptr, error) {
-	processedArgs := make([]uintptr, len(args))
-	for i, arg := range args {
-		processedArgs[i] = processArg(arg)
-	}
+    processedArgs := make([]uintptr, len(args))
+    for i, arg := range args {
+        processedArgs[i] = processArg(arg)
+    }
 
-	lc := &libcall{
-		fn: funcAddr,
-		n:  uintptr(len(processedArgs)),
-	}
+    lc := &libcall{
+        fn: funcAddr,
+        n:  uintptr(len(processedArgs)),
+    }
 
-	if len(processedArgs) > 0 {
-		lc.args = uintptr(unsafe.Pointer(&processedArgs[0]))
-	} else {
-		lc.args = 0
-	}
+    if len(processedArgs) > 0 {
+        lc.args = uintptr(unsafe.Pointer(&processedArgs[0]))
+    } else {
+        lc.args = 0
+    }
 
-	wincall(lc)
+    // Execute the call on g0 (system stack) to satisfy Windows stack probes.
+    systemstack(func() {
+        wincall(lc)
+    })
 
-	return lc.r1, nil
+    // Keep original arguments alive until after the call completes.
+    runtime.KeepAlive(args)
+    return lc.r1, nil
+}
+
+//go:linkname systemstack runtime.systemstack
+func systemstack(fn func())
+
+// RunOnG0 runs the provided closure on the Go system stack (g0).
+func RunOnG0(fn func()) { systemstack(fn) }
+
+// CurrentThreadIDFast reads the TID from the TEB. Safe on g0.
+func CurrentThreadIDFast() uint32 { return tidFromTeb() }
+
+// CallG0 invokes the target function using the Go system stack (g0)
+// instead of a dedicated native thread. This avoids needing a persistent
+// worker and ensures compatibility with _chkstk and large stack probes.
+func CallG0(funcAddr uintptr, args ...interface{}) (uintptr, error) {
+    return DirectCall(funcAddr, args...)
 }
 
 func initAddresses() {
@@ -77,7 +102,7 @@ func initAddresses() {
 }
 
 func LoadLibraryW(name string) uintptr {
-	namePtr, _ := UTF16PtrFromString(name)
+    namePtr, _ := UTF16PtrFromString(name)
 
 	maxRetries := 5
 
@@ -88,11 +113,10 @@ func LoadLibraryW(name string) uintptr {
 			continue
 		}
 
-		r1, err := CallWorker(loadLibraryAddr, namePtr)
-
-		if err == nil && r1 != 0 {
-			return r1
-		}
+        r1, _ := CallG0(loadLibraryAddr, namePtr)
+        if r1 != 0 {
+            return r1
+        }
 
 		if i < maxRetries-1 {
 			time.Sleep(time.Duration(50+i*50) * time.Millisecond)
@@ -103,8 +127,8 @@ func LoadLibraryW(name string) uintptr {
 }
 
 func GetProcAddress(moduleHandle uintptr, proc unsafe.Pointer) uintptr {
-	r1, _ := CallWorker(getGetProcAddressAddr(), moduleHandle, proc)
-	return r1
+    r1, _ := CallG0(getGetProcAddressAddr(), moduleHandle, proc)
+    return r1
 }
 
 func getLoadLibraryWAddr() uintptr {

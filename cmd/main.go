@@ -1,23 +1,32 @@
 package main
 
 import (
-	"bufio"
-	"fmt"
-	"os"
-	"strconv"
-	"strings"
-	"runtime"
-	"unsafe"
-	"github.com/carved4/go-wincall"
+    "bufio"
+    "fmt"
+    "os"
+    "strconv"
+    "strings"
+    "runtime"
+    "unsafe"
+    "github.com/carved4/go-wincall"
 )
 
 func main() {
-	wincall.UnhookNtdll()
-	if wincall.IsDebuggerPresent() {
-		os.Exit(1)
-	}
-	fmt.Println("go-wincall demo :3")
-	showMenu()
+    // Pin the main goroutine to a single OS thread so all g0 calls
+    // in this process run on the same thread for consistent TID.
+    runtime.LockOSThread()
+    wincall.UnhookNtdll()
+    if wincall.IsDebuggerPresent() {
+        os.Exit(1)
+    }
+    fmt.Println("go-wincall demo :3")
+    // Verify g0 execution using a tiny NOSPLIT TEB reader to avoid stack growth
+    tidBefore := wincall.CurrentThreadIDFast()
+    var tidOnG0 uint32
+    wincall.RunOnG0(func(){ tidOnG0 = wincall.CurrentThreadIDFast() })
+    fmt.Printf("current thread id: %d\n", tidBefore)
+    fmt.Printf("current thread id (on g0): %d (same=%v)\n", tidOnG0, tidOnG0 == tidBefore)
+    showMenu()
 }
 
 func showMenu() {
@@ -76,11 +85,21 @@ func customResolver(scanner *bufio.Scanner) {
 
 		funcInput := strings.TrimSpace(scanner.Text())
 
-		fmt.Printf("\nloading %s...\n", dllName)
-		wincall.LoadLibraryW(dllName)
-		nativeThreadId, goThreadId, _ := wincall.GetWorkerThreadIds()
-		fmt.Printf("native thread id: %d\n", nativeThreadId)
-		fmt.Printf("go thread id: %d\n", goThreadId)
+        fmt.Printf("\nloading %s...\n", dllName)
+        wincall.LoadLibraryW(dllName)
+        // Display current thread identity using g0-safe TEB read and confirm via CallG0
+        tidCur := wincall.CurrentThreadIDFast()
+        k32 := wincall.LoadLibraryW("kernel32.dll")
+        getTid := wincall.GetFunctionAddress(k32, wincall.GetHash("GetCurrentThreadId"))
+        var tidG0 uint32
+        if getTid != 0 {
+            t, _ := wincall.CallG0(getTid)
+            tidG0 = uint32(t)
+        }
+        fmt.Printf("g0/current thread id: %d\n", tidCur)
+        if getTid != 0 {
+            fmt.Printf("g0 CallG0(GetCurrentThreadId): %d (same=%v)\n", tidG0, tidG0 == tidCur)
+        }
 
 		dllHash := wincall.GetHash(dllName)
 		moduleBase := wincall.GetModuleBase(dllHash)
@@ -183,13 +202,13 @@ func exampleManual() {
 	title, _ := wincall.UTF16ptr("manual")
 	message, _ := wincall.UTF16ptr("twitter.com/owengsmt")
 
-	wincall.CallWorker(
-		funcAddr,
-		0, // hwnd
-		message,
-		title,
-		0, // MB_OK
-	)
+    wincall.CallG0(
+        funcAddr,
+        0, // hwnd
+        message,
+        title,
+        0, // MB_OK
+    )
 	runtime.KeepAlive(title)
 	runtime.KeepAlive(message)
 }

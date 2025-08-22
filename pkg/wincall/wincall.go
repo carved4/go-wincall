@@ -1,69 +1,39 @@
 package wincall
 
 import (
-	"runtime"
-	"sync"
-	"time"
-	"unsafe"
+    "sync"
+    "unsafe"
 
-	"github.com/carved4/go-wincall/pkg/errors"
-	"github.com/carved4/go-wincall/pkg/obf"
-	"github.com/carved4/go-wincall/pkg/resolve"
-	"github.com/carved4/go-wincall/pkg/syscall"
+    "github.com/carved4/go-wincall/pkg/errors"
+    "github.com/carved4/go-wincall/pkg/obf"
+    "github.com/carved4/go-wincall/pkg/resolve"
+    "github.com/carved4/go-wincall/pkg/syscall"
 )
 
 var (
-	ntAllocateVirtualMemoryNum    uint16
-	ntAllocateVirtualMemoryAddr   uintptr
-	ntWriteVirtualMemoryNum       uint16
-	ntWriteVirtualMemoryAddr      uintptr
-	ntReadVirtualMemoryNum        uint16
-	ntReadVirtualMemoryAddr       uintptr
-	ntProtectVirtualMemoryNum     uint16
-	ntProtectVirtualMemoryAddr    uintptr
-	ntCreateEventNum              uint16
-	ntCreateEventAddr             uintptr
-	ntSetEventNum                 uint16
-	ntSetEventAddr                uintptr
-	ntCreateThreadExNum           uint16
-	ntCreateThreadExAddr          uintptr
-	ntWaitForSingleObjectNum      uint16
-	ntWaitForSingleObjectAddr     uintptr
-	ntQueryInformationThreadNum   uint16
-	ntQueryInformationThreadAddr  uintptr
-	ntQueryInformationProcessNum  uint16
-	ntQueryInformationProcessAddr uintptr
-	resolveSyscallsOnce           sync.Once
+    ntAllocateVirtualMemoryNum    uint16
+    ntAllocateVirtualMemoryAddr   uintptr
+    ntWriteVirtualMemoryNum       uint16
+    ntWriteVirtualMemoryAddr      uintptr
+    ntReadVirtualMemoryNum        uint16
+    ntReadVirtualMemoryAddr       uintptr
+    ntProtectVirtualMemoryNum     uint16
+    ntProtectVirtualMemoryAddr    uintptr
+    ntQueryInformationThreadNum   uint16
+    ntQueryInformationThreadAddr  uintptr
+    ntQueryInformationProcessNum  uint16
+    ntQueryInformationProcessAddr uintptr
+    resolveSyscallsOnce           sync.Once
 )
 
 func resolveSyscalls() {
-	ntAllocateVirtualMemoryNum, ntAllocateVirtualMemoryAddr = resolve.GetSyscallAndAddress(obf.GetHash("NtAllocateVirtualMemory"))
-	ntWriteVirtualMemoryNum, ntWriteVirtualMemoryAddr = resolve.GetSyscallAndAddress(obf.GetHash("NtWriteVirtualMemory"))
-	ntReadVirtualMemoryNum, ntReadVirtualMemoryAddr = resolve.GetSyscallAndAddress(obf.GetHash("NtReadVirtualMemory"))
-	ntProtectVirtualMemoryNum, ntProtectVirtualMemoryAddr = resolve.GetSyscallAndAddress(obf.GetHash("NtProtectVirtualMemory"))
-	ntCreateEventNum, ntCreateEventAddr = resolve.GetSyscallAndAddress(obf.GetHash("NtCreateEvent"))
-	ntSetEventNum, ntSetEventAddr = resolve.GetSyscallAndAddress(obf.GetHash("NtSetEvent"))
-	ntCreateThreadExNum, ntCreateThreadExAddr = resolve.GetSyscallAndAddress(obf.GetHash("NtCreateThreadEx"))
-	ntWaitForSingleObjectNum, ntWaitForSingleObjectAddr = resolve.GetSyscallAndAddress(obf.GetHash("NtWaitForSingleObject"))
-	ntQueryInformationThreadNum, ntQueryInformationThreadAddr = resolve.GetSyscallAndAddress(obf.GetHash("NtQueryInformationThread"))
-	ntQueryInformationProcessNum, ntQueryInformationProcessAddr = resolve.GetSyscallAndAddress(obf.GetHash("NtQueryInformationProcess"))
+    ntAllocateVirtualMemoryNum, ntAllocateVirtualMemoryAddr = resolve.GetSyscallAndAddress(obf.GetHash("NtAllocateVirtualMemory"))
+    ntWriteVirtualMemoryNum, ntWriteVirtualMemoryAddr = resolve.GetSyscallAndAddress(obf.GetHash("NtWriteVirtualMemory"))
+    ntReadVirtualMemoryNum, ntReadVirtualMemoryAddr = resolve.GetSyscallAndAddress(obf.GetHash("NtReadVirtualMemory"))
+    ntProtectVirtualMemoryNum, ntProtectVirtualMemoryAddr = resolve.GetSyscallAndAddress(obf.GetHash("NtProtectVirtualMemory"))
+    ntQueryInformationThreadNum, ntQueryInformationThreadAddr = resolve.GetSyscallAndAddress(obf.GetHash("NtQueryInformationThread"))
+    ntQueryInformationProcessNum, ntQueryInformationProcessAddr = resolve.GetSyscallAndAddress(obf.GetHash("NtQueryInformationProcess"))
 }
-
-var taskPool = sync.Pool{
-	New: func() interface{} {
-		return &win32Task{
-			args:       make([]uintptr, 0, maxArgs),
-			argRefs:    make([]interface{}, 0, maxArgs),
-			completion: make(chan taskResult, 1),
-		}
-	},
-}
-
-//go:noescape
-func wincall_winthread_entry() uintptr
-
-//go:noescape
-func wincall_get_winthread_entry_addr() uintptr
 
 func NtAllocateVirtualMemory(processHandle uintptr, baseAddress *uintptr, zeroBits uintptr, regionSize *uintptr, allocationType uintptr, protect uintptr) (uint32, error) {
 	resolveSyscallsOnce.Do(resolveSyscalls)
@@ -138,91 +108,7 @@ func NtProtectVirtualMemory(processHandle uintptr, baseAddress *uintptr, regionS
 	return uint32(ret), nil
 }
 
-func NtCreateEvent(eventHandle *uintptr, desiredAccess uintptr, objectAttributes uintptr, eventType uintptr, initialState bool) (uint32, error) {
-	resolveSyscallsOnce.Do(resolveSyscalls)
-	if ntCreateEventNum == 0 {
-		return 0xC0000139, errors.New(errors.Err1)
-	}
-
-	var initialStateInt uintptr
-	if initialState {
-		initialStateInt = 1
-	}
-
-	ret, err := syscall.IndirectSyscall(ntCreateEventNum, ntCreateEventAddr,
-		uintptr(unsafe.Pointer(eventHandle)),
-		desiredAccess,
-		objectAttributes,
-		eventType,
-		initialStateInt,
-	)
-	if err != nil {
-		return uint32(ret), err
-	}
-	return uint32(ret), nil
-}
-
-func NtSetEvent(eventHandle uintptr, previousState *uintptr) (uint32, error) {
-	resolveSyscallsOnce.Do(resolveSyscalls)
-	if ntSetEventNum == 0 {
-		return 0xC0000139, errors.New(errors.Err1)
-	}
-	ret, err := syscall.IndirectSyscall(ntSetEventNum, ntSetEventAddr,
-		eventHandle,
-		uintptr(unsafe.Pointer(previousState)),
-	)
-	if err != nil {
-		return uint32(ret), err
-	}
-	return uint32(ret), nil
-}
-
-func NtCreateThreadEx(threadHandle *uintptr, desiredAccess uintptr, objectAttributes uintptr, processHandle uintptr, startAddress uintptr, parameter uintptr, createFlags uintptr, stackZeroBits uintptr, stackCommitSize uintptr, stackReserveSize uintptr, attributeList uintptr) (uint32, error) {
-	resolveSyscallsOnce.Do(resolveSyscalls)
-	if ntCreateThreadExNum == 0 {
-		return 0xC0000139, errors.New(errors.Err1)
-	}
-	ret, err := syscall.IndirectSyscall(ntCreateThreadExNum, ntCreateThreadExAddr,
-		uintptr(unsafe.Pointer(threadHandle)),
-		desiredAccess,
-		objectAttributes,
-		processHandle,
-		startAddress,
-		parameter,
-		createFlags,
-		stackZeroBits,
-		stackCommitSize,
-		stackReserveSize,
-		attributeList,
-	)
-	if err != nil {
-		return uint32(ret), err
-	}
-	return uint32(ret), nil
-}
-
-func NtWaitForSingleObject(handle uintptr, alertable bool, timeout *int64) (uint32, error) {
-	resolveSyscallsOnce.Do(resolveSyscalls)
-	if ntWaitForSingleObjectNum == 0 {
-		return 0xC0000139, errors.New(errors.Err1)
-	}
-
-	var alertableFlag uintptr
-	if alertable {
-		alertableFlag = 1
-	}
-
-	var timeoutPtr uintptr
-	if timeout != nil {
-		timeoutPtr = uintptr(unsafe.Pointer(timeout))
-	}
-
-	ret, err := syscall.IndirectSyscall(ntWaitForSingleObjectNum, ntWaitForSingleObjectAddr, handle, alertableFlag, timeoutPtr)
-	if err != nil {
-		return uint32(ret), err
-	}
-	return uint32(ret), nil
-}
+// Removed unused Nt* wrappers for events/threads waiting/creation.
 
 // ThreadBasicInformation structure for NtQueryInformationThread
 type ThreadBasicInformation struct {
@@ -294,289 +180,4 @@ func NtQueryInformationProcess(processHandle uintptr, processInformationClass ui
 	return uint32(ret), nil
 }
 
-func (w *Worker) encryptSharedMem() {
-	w.sharedMemMtx.Lock()
-	defer w.sharedMemMtx.Unlock()
-
-	libcallData := make([]byte, libcallSize)
-	var bytesRead uintptr
-	status, err := NtReadVirtualMemory(
-		0xFFFFFFFFFFFFFFFF, // Current process
-		w.sharedMem,
-		uintptr(unsafe.Pointer(&libcallData[0])),
-		libcallSize,
-		&bytesRead,
-	)
-
-	if err != nil || status != 0 || bytesRead != libcallSize {
-		return
-	}
-
-	// Encrypt in place to minimize allocations
-	obf.EncodeInPlace(libcallData)
-
-	var bytesWritten uintptr
-	status, err = NtWriteVirtualMemory(
-		0xFFFFFFFFFFFFFFFF, // Current process
-		w.sharedMem,
-		uintptr(unsafe.Pointer(&libcallData[0])),
-		libcallSize,
-		&bytesWritten,
-	)
-
-	if err != nil || status != 0 || bytesWritten != libcallSize {
-		NtWriteVirtualMemory(
-			0xFFFFFFFFFFFFFFFF,
-			w.sharedMem,
-			uintptr(unsafe.Pointer(&libcallData[0])),
-			libcallSize,
-			&bytesWritten,
-		)
-	}
-	// Zeroize sensitive buffers
-	for i := range libcallData {
-		libcallData[i] = 0
-	}
-}
-
-func (w *Worker) decryptSharedMem() {
-	w.sharedMemMtx.Lock()
-	defer w.sharedMemMtx.Unlock()
-
-	encryptedData := make([]byte, libcallSize)
-	var bytesRead uintptr
-	status, err := NtReadVirtualMemory(
-		0xFFFFFFFFFFFFFFFF, // Current process
-		w.sharedMem,
-		uintptr(unsafe.Pointer(&encryptedData[0])),
-		libcallSize,
-		&bytesRead,
-	)
-
-	if err != nil || status != 0 || bytesRead != libcallSize {
-		return
-	}
-
-	// Decrypt in place
-	obf.EncodeInPlace(encryptedData)
-
-	var bytesWritten uintptr
-	status, err = NtWriteVirtualMemory(
-		0xFFFFFFFFFFFFFFFF, // Current process
-		w.sharedMem,
-		uintptr(unsafe.Pointer(&encryptedData[0])),
-		libcallSize,
-		&bytesWritten,
-	)
-
-	if err != nil || status != 0 || bytesWritten != libcallSize {
-		// we should never get here, kill ourselves
-		runtime.Goexit()
-	}
-	// Zeroize sensitive buffers
-	for i := range encryptedData {
-		encryptedData[i] = 0
-	}
-}
-
-func workerDispatcher() {
-	worker := GetWorker()
-
-	// Get the current Go worker thread ID
-	threadId, err := GetCurrentThreadId()
-	if err == nil {
-		worker.goWorkerThreadId = threadId
-	}
-
-	for task := range worker.tasks {
-		worker.placeArgsInSharedMem(task)
-
-		worker.decryptSharedMem()
-
-		status, err := NtSetEvent(worker.hNewTaskEvent, nil)
-		if err != nil || status != 0 {
-			worker.encryptSharedMem()
-			task.completion <- taskResult{0, errors.New(errors.Err1)}
-			continue
-		}
-
-		status, err = NtWaitForSingleObject(worker.hTaskDoneEvent, false, nil)
-		if err != nil || status != 0 {
-			worker.encryptSharedMem()
-			task.completion <- taskResult{0, errors.New(errors.Err2)}
-			continue
-		}
-
-		result := worker.retrieveResultFromSharedMem()
-
-		worker.encryptSharedMem()
-
-		task.completion <- taskResult{result, nil}
-
-		runtime.KeepAlive(task.argRefs)
-	}
-}
-
-func Init() error {
-	worker := GetWorker()
-	worker.threadLock.Lock()
-	defer worker.threadLock.Unlock()
-
-	if worker.hWorkerThread != 0 {
-		return nil
-	}
-
-	if err := worker.allocSharedMem(); err != nil {
-		return errors.New(errors.Err1)
-	}
-
-	resolveSyscallsOnce.Do(resolveSyscalls)
-
-	status, err := NtCreateEvent(&worker.hNewTaskEvent, 0x1F0003, 0, 1, false)
-	if err != nil || status != 0 {
-		return errors.New(errors.Err1)
-	}
-
-	status, err = NtCreateEvent(&worker.hTaskDoneEvent, 0x1F0003, 0, 1, false)
-	if err != nil || status != 0 {
-		return errors.New(errors.Err1)
-	}
-
-	worker.waitForSingleObjectNum, worker.waitForSingleObjectAddr = ntWaitForSingleObjectNum, ntWaitForSingleObjectAddr
-	worker.setEventNum, worker.setEventAddr = ntSetEventNum, ntSetEventAddr
-
-	var threadHandle uintptr
-	status, err = NtCreateThreadEx(
-		&threadHandle,
-		0x1FFFFF,
-		0,
-		0xFFFFFFFFFFFFFFFF,
-		wincall_get_winthread_entry_addr(),
-		uintptr(unsafe.Pointer(worker)),
-		0, 0, 0, 0, 0,
-	)
-
-	if err != nil || status != 0 {
-		return errors.New(errors.Err1)
-	}
-	worker.hWorkerThread = threadHandle
-
-	go workerDispatcher()
-
-	time.Sleep(100 * time.Millisecond)
-
-	if err := worker.waitForWorkerReady(); err != nil {
-		return errors.New(errors.Err2)
-	}
-
-	// Get the native worker thread ID after the worker is ready
-	if err := worker.retrieveNativeWorkerThreadId(); err != nil {
-		return errors.New(errors.Err2)
-	}
-
-	return nil
-}
-
-func CallWorker(funcAddr uintptr, args ...interface{}) (uintptr, error) {
-	if err := Init(); err != nil {
-		return 0, err
-	}
-	return GetWorker().QueueTask(funcAddr, args...)
-}
-
-func (w *Worker) QueueTask(funcAddr uintptr, args ...interface{}) (uintptr, error) {
-	task := taskPool.Get().(*win32Task)
-	task.fn = funcAddr
-	task.args = task.args[:0]
-	task.argRefs = task.argRefs[:0]
-
-	for _, arg := range args {
-		task.args = append(task.args, processArg(arg))
-		task.argRefs = append(task.argRefs, arg)
-	}
-
-	w.tasks <- task
-
-	result := <-task.completion
-
-	taskPool.Put(task)
-
-	return result.r1, result.err
-}
-
-func (w *Worker) waitForWorkerReady() error {
-	var kernel32Base uintptr
-	var getCurrentProcessIdAddr uintptr
-
-	maxRetries := 15
-	for i := 0; i < maxRetries; i++ {
-		kernel32Hash := obf.GetHash("kernel32.dll")
-		kernel32Base = resolve.GetModuleBase(kernel32Hash)
-		if kernel32Base != 0 {
-			getCurrentProcessIdHash := obf.GetHash("GetCurrentProcessId")
-			getCurrentProcessIdAddr = resolve.GetFunctionAddress(kernel32Base, getCurrentProcessIdHash)
-			if getCurrentProcessIdAddr != 0 {
-				break
-			}
-		}
-
-		waitTime := time.Duration(10+i*5) * time.Millisecond
-		if waitTime > 100*time.Millisecond {
-			waitTime = 100 * time.Millisecond
-		}
-		time.Sleep(waitTime)
-	}
-
-	if kernel32Base == 0 {
-		return errors.New(errors.Err1)
-	}
-	if getCurrentProcessIdAddr == 0 {
-		return errors.New(errors.Err1)
-	}
-
-	for i := 0; i < maxRetries; i++ {
-		result, err := w.QueueTask(getCurrentProcessIdAddr)
-		if err == nil && result != 0 {
-			return nil
-		}
-
-		waitTime := time.Duration(5+i*10) * time.Millisecond
-		if waitTime > 200*time.Millisecond {
-			waitTime = 200 * time.Millisecond
-		}
-		time.Sleep(waitTime)
-	}
-
-	return errors.New(errors.Err2)
-}
-
-func (w *Worker) retrieveNativeWorkerThreadId() error {
-	// Use NtQueryInformationThread to get the thread ID of the native worker thread
-	var tbi ThreadBasicInformation
-	var returnLength uintptr
-
-	status, err := NtQueryInformationThread(
-		w.hWorkerThread,
-		0, // ThreadBasicInformation
-		uintptr(unsafe.Pointer(&tbi)),
-		uintptr(unsafe.Sizeof(tbi)),
-		&returnLength,
-	)
-
-	if err != nil || status != 0 {
-		return errors.New(errors.Err1)
-	}
-
-	w.nativeWorkerThreadId = uint32(tbi.ClientIdThread)
-	return nil
-}
-
-// GetWorkerThreadIds returns both the native worker thread ID and Go worker thread ID
-func GetWorkerThreadIds() (nativeThreadId uint32, goThreadId uint32, err error) {
-	if err := Init(); err != nil {
-		return 0, 0, err
-	}
-
-	worker := GetWorker()
-	return worker.nativeWorkerThreadId, worker.goWorkerThreadId, nil
-}
+// (all worker-thread code removed)

@@ -16,13 +16,22 @@ func init() {
 	resolve.SetLoadLibraryCallback(wincall.LoadLibraryW)
 }
 
-func CallWorker(funcAddr uintptr, args ...interface{}) (uintptr, error) {
-	return wincall.CallWorker(funcAddr, args...)
+// CallG0 wraps calling a function pointer on the Go system stack (g0).
+// Prefer this over CallWorker if you don't need the persistent native thread.
+func CallG0(funcAddr uintptr, args ...interface{}) (uintptr, error) {
+    return wincall.CallG0(funcAddr, args...)
 }
 
-func GetWorkerThreadIds() (nativeThreadId uint32, goThreadId uint32, err error) {
-	return wincall.GetWorkerThreadIds()
+// GetCurrentThreadId returns the native thread id of the current thread.
+func GetCurrentThreadId() (uint32, error) {
+    return wincall.GetCurrentThreadId()
 }
+
+// CurrentThreadIDFast reads TID from TEB (no syscalls). Safe on g0.
+func CurrentThreadIDFast() uint32 { return wincall.CurrentThreadIDFast() }
+
+// RunOnG0 executes f on the system stack.
+func RunOnG0(f func()) { wincall.RunOnG0(f) }
 
 func LoadLibraryW(name string) uintptr {
 	return wincall.LoadLibraryW(name)
@@ -84,7 +93,8 @@ func Call(dllName, funcName interface{}, args ...interface{}) (uintptr, error) {
 		return 0, errors.New(errors.Err2)
 	}
 
-	result, err := wincall.CallWorker(funcAddr, args...)
+    // Execute on g0 instead of the persistent native worker thread.
+    result, err := wincall.CallG0(funcAddr, args...)
 	if err != nil {
 		return 0, err
 	}
@@ -113,21 +123,7 @@ func NtProtectVirtualMemory(processHandle uintptr, baseAddress *uintptr, regionS
 	return wincall.NtProtectVirtualMemory(processHandle, baseAddress, regionSize, newProtect, oldProtect)
 }
 
-func NtCreateEvent(eventHandle *uintptr, desiredAccess uintptr, objectAttributes uintptr, eventType uintptr, initialState bool) (uint32, error) {
-	return wincall.NtCreateEvent(eventHandle, desiredAccess, objectAttributes, eventType, initialState)
-}
-
-func NtSetEvent(eventHandle uintptr, previousState *uintptr) (uint32, error) {
-	return wincall.NtSetEvent(eventHandle, previousState)
-}
-
-func NtCreateThreadEx(threadHandle *uintptr, desiredAccess uintptr, objectAttributes uintptr, processHandle uintptr, startAddress uintptr, parameter uintptr, createFlags uintptr, stackZeroBits uintptr, stackCommitSize uintptr, stackReserveSize uintptr, attributeList uintptr) (uint32, error) {
-	return wincall.NtCreateThreadEx(threadHandle, desiredAccess, objectAttributes, processHandle, startAddress, parameter, createFlags, stackZeroBits, stackCommitSize, stackReserveSize, attributeList)
-}
-
-func NtWaitForSingleObject(handle uintptr, alertable bool, timeout *int64) (uint32, error) {
-	return wincall.NtWaitForSingleObject(handle, alertable, timeout)
-}
+// Removed unused Nt* wrappers for events/thread creation/waiting.
 
 // UnhookNtdll restores clean ntdll.dll from disk to remove any hooks
 func UnhookNtdll() error {

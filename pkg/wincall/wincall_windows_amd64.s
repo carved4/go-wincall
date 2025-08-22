@@ -54,60 +54,20 @@ _0args:
 
 	RET
 
-// Exported Go function to get the address of the thread entry point.
-TEXT ·wincall_get_winthread_entry_addr(SB),NOSPLIT,$0
-	LEAQ	·wincall_winthread_entry(SB), AX
-	MOVQ	AX, ret+0(FP)
-	RET
+// Go ABI shim for wincall(libcall *libcall)
+// Places the libcall pointer into CX and jumps to the common stdcall path.
+// func wincall(libcall *libcall)
+TEXT ·wincall(SB),NOSPLIT,$0-8
+	MOVQ	libcall+0(FP), CX
+	JMP	wincall_asmstdcall(SB)
 
-// The new persistent worker thread entry point.
-// RCX contains a pointer to the worker struct from Go.
-TEXT ·wincall_winthread_entry(SB),NOSPLIT|NOFRAME,$256
-	// The worker struct pointer is in RCX. We must preserve it across calls.
-	// We save it in a non-volatile register, BX.
-	MOVQ	CX, BX
+// (worker thread entry removed)
 
-_worker_loop:
-	// Wait for a new task.
-	// Call NtWaitForSingleObject(w.hNewTaskEvent, FALSE, NULL)
-	
-	// Load the syscall number and address from the worker struct using the CORRECT offsets.
-	MOVW	80(BX), AX      // worker.waitForSingleObjectNum
-	MOVQ	72(BX), R11     // worker.waitForSingleObjectAddr
+TEXT ·tidFromTeb(SB),NOSPLIT,$0-4
+    // GS:0x30 -> TEB on x64 Windows
+    MOVQ 0x30(GS), AX
+    // TEB + 0x48 -> CLIENT_ID.UniqueThread
+    MOVQ 0x48(AX), AX
+    MOVL AX, ret+0(FP)
+    RET
 
-	// Arguments for NtWaitForSingleObject:
-	MOVQ	32(BX), CX      // worker.hNewTaskEvent
-	XORL	DX, DX          // Arg2: Alertable (FALSE)
-	XORL	R8, R8          // Arg3: Timeout (NULL)
-	
-	MOVQ    CX, R10
-	CALL	R11 // Indirect syscall via trampoline
-
-	// At this point, a new task has been placed in shared memory.
-	// The Go side has signaled hNewTaskEvent.
-	
-	// The address of the shared memory block is in our worker struct.
-	// This address points to a libcall struct.
-	MOVQ	48(BX), CX      // worker.sharedMem
-
-	// Call the generic stdcall function. It expects the libcall ptr in CX.
-	CALL	wincall_asmstdcall(SB)
-	
-	// The function has been executed. The result is now in the shared libcall struct.
-
-	// Signal the Go side that the task is complete.
-	// Call NtSetEvent(w.hTaskDoneEvent, NULL)
-
-	// Load the syscall number and address from the worker struct.
-	MOVW	96(BX), AX      // worker.setEventNum
-	MOVQ	88(BX), R11     // worker.setEventAddr
-	
-	// Arguments for NtSetEvent:
-	MOVQ	40(BX), CX      // worker.hTaskDoneEvent
-	XORL	DX, DX          // Arg2: PreviousState (NULL)
-
-	MOVQ    CX, R10
-	CALL	R11 // Indirect syscall via trampoline
-
-	// Loop back to wait for the next task.
-	JMP	_worker_loop
