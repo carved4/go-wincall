@@ -1,15 +1,14 @@
 package resolve
 
 import (
-	"fmt"
-	"strings"
-	"strconv"
-	"sync"
-	"time"
-	"unsafe"
-	"github.com/carved4/go-wincall/pkg/utils"
-	"github.com/Binject/debug/pe"
-	"github.com/carved4/go-wincall/pkg/obf"
+    "fmt"
+    "strings"
+    "strconv"
+    "sync"
+    "time"
+    "unsafe"
+    "github.com/carved4/go-wincall/pkg/utils"
+    "github.com/carved4/go-wincall/pkg/obf"
 )
 
 // API Set structures for dynamic resolution
@@ -47,14 +46,16 @@ var (
 	functionCacheMutex sync.RWMutex
 	syscallCache      = make(map[uint32]uint16)
 	syscallCacheMutex sync.RWMutex
-	sortedExports     []pe.Export
-	sortedExportsOnce sync.Once
+    sortedExports     []Export
+    sortedExportsOnce sync.Once
+    exportIndexCache  = make(map[uintptr]*exportIndex)
+    exportIndexMutex  sync.RWMutex
 	
 	loadLibraryCallback func(string) uintptr
 )
 
 func SetLoadLibraryCallback(callback func(string) uintptr) {
-	loadLibraryCallback = callback
+    loadLibraryCallback = callback
 }
 
 //go:nosplit
@@ -178,55 +179,39 @@ func GetFunctionAddress(moduleBase uintptr, functionHash uint32) uintptr {
 		return 0
 	}
 
-	sizeOfImage := *(*uint32)(unsafe.Pointer(moduleBase + uintptr(peOffset) + 24 + 56))
+    // Resolve using cached export index for O(1) lookups
+    idx := getExportIndex(moduleBase)
+    if idx == nil {
+        return 0
+    }
 
-	dataSlice := unsafe.Slice((*byte)(unsafe.Pointer(moduleBase)), sizeOfImage)
-
-	file, err := pe.NewFileFromMemory(&memoryReaderAt{data: dataSlice})
-	if err != nil {
-		return 0
-	}
-	defer file.Close()
-
-	exports, err := file.Exports()
-	if err != nil {
-		return 0
-	}
-
-	var funcAddr uintptr
-	var foundExport *pe.Export
+    var funcAddr uintptr
+    var foundExport *Export
 	
-	if functionHash < 65536 {
-		for _, export := range exports {
-			if export.Ordinal == uint32(functionHash) {
-				foundExport = &export
-				break
-			}
-		}
-	}
+    if functionHash < 65536 {
+        if exp, ok := idx.ord[functionHash]; ok {
+            e := exp
+            foundExport = &e
+        }
+    }
 	
-	if foundExport == nil {
-		for _, export := range exports {
-			if export.Name != "" {
-				currentHash := obf.GetHash(export.Name)
-				if currentHash == functionHash {
-					foundExport = &export
-					break
-				}
-			}
-		}
-	}
+    if foundExport == nil {
+        if exp, ok := idx.name[functionHash]; ok {
+            e := exp
+            foundExport = &e
+        }
+    }
 	
-	if foundExport != nil {
-		funcAddr = moduleBase + uintptr(foundExport.VirtualAddress)
-		
-		if isForwardedExport(moduleBase, funcAddr, file) {
-			forwarderString := getForwarderString(funcAddr)
-			if resolvedAddr := resolveForwardedExport(forwarderString); resolvedAddr != 0 {
-				funcAddr = resolvedAddr
-			}
-		}
-	}
+    if foundExport != nil {
+        funcAddr = moduleBase + uintptr(foundExport.VirtualAddress)
+
+        if isForwardedExport(moduleBase, funcAddr) {
+            forwarderString := getForwarderString(funcAddr)
+            if resolvedAddr := resolveForwardedExport(forwarderString); resolvedAddr != 0 {
+                funcAddr = resolvedAddr
+            }
+        }
+    }
 
 	if funcAddr != 0 {
 		encodedAddr := obf.EncodeUintptr(funcAddr)
@@ -283,37 +268,36 @@ func resolveApiSet(dllName string) string {
 		apiSetName := strings.ToLower(utils.UTF16ToString(&nameSlice[0]))
 		
 		// Check if this matches our search
-		if strings.ToLower(apiSetName) == searchName {
-			// Found match, get the value (real DLL name)
-			if entry.ValueCount == 0 {
-				continue
-			}
-			
-			valuePtr := uintptr(unsafe.Pointer(apiSetMap)) + uintptr(entry.ValueOffset)
-			value := (*API_SET_VALUE_ENTRY)(unsafe.Pointer(valuePtr))
-			
-			// Read the real DLL name
-			realDllPtr := uintptr(unsafe.Pointer(apiSetMap)) + uintptr(value.ValueOffset)
-			realDllBytes := (*[256]uint16)(unsafe.Pointer(realDllPtr))
-			realDllLen := value.ValueLength / 2
-			
-			if realDllLen > 256 {
-				continue
-			}
-			
-			realDllSlice := make([]uint16, realDllLen)
-			for j := uint32(0); j < realDllLen; j++ {
-				realDllSlice[j] = realDllBytes[j]
-			}
-			realDllName := utils.UTF16ToString(&realDllSlice[0])
-			
-			// Add .dll extension if not present
-			if !strings.HasSuffix(strings.ToLower(realDllName), ".dll") {
-				realDllName += ".dll"
-			}
-			
-			return realDllName
-		}
+        if strings.ToLower(apiSetName) == searchName {
+            // Found match, choose best value entry
+            if entry.ValueCount == 0 {
+                continue
+            }
+
+            bestName := ""
+            valuesBase := uintptr(unsafe.Pointer(apiSetMap)) + uintptr(entry.ValueOffset)
+            for k := uint32(0); k < entry.ValueCount; k++ {
+                ve := (*API_SET_VALUE_ENTRY)(unsafe.Pointer(valuesBase + uintptr(k)*unsafe.Sizeof(API_SET_VALUE_ENTRY{})))
+
+                realDllPtr := uintptr(unsafe.Pointer(apiSetMap)) + uintptr(ve.ValueOffset)
+                realDllBytes := (*[256]uint16)(unsafe.Pointer(realDllPtr))
+                realDllLen := ve.ValueLength / 2
+                if realDllLen == 0 || realDllLen > 256 { continue }
+
+                // If NameLength>0 this is a host-specific override; prefer the first such entry
+                dllSlice := make([]uint16, realDllLen)
+                for j := uint32(0); j < realDllLen; j++ { dllSlice[j] = realDllBytes[j] }
+                realDllName := utils.UTF16ToString(&dllSlice[0])
+
+                if !strings.HasSuffix(strings.ToLower(realDllName), ".dll") {
+                    realDllName += ".dll"
+                }
+
+                if ve.NameLength > 0 { return realDllName }
+                if bestName == "" { bestName = realDllName }
+            }
+            if bestName != "" { return bestName }
+        }
 	}
 
 	// If not found, try to find a similar API Set with a different version
@@ -376,22 +360,70 @@ func resolveApiSet(dllName string) string {
 	return dllName
 }
 
-func isForwardedExport(moduleBase, funcAddr uintptr, file *pe.File) bool {
-	if file.OptionalHeader == nil {
-		return false
-	}
-	
-	rva := uint32(funcAddr - moduleBase)
-	
-	if oh64, ok := file.OptionalHeader.(*pe.OptionalHeader64); ok {
-		exportDir := oh64.DataDirectory[pe.IMAGE_DIRECTORY_ENTRY_EXPORT]
-		return rva >= exportDir.VirtualAddress && rva < exportDir.VirtualAddress+exportDir.Size
-	} else if oh32, ok := file.OptionalHeader.(*pe.OptionalHeader32); ok {
-		exportDir := oh32.DataDirectory[pe.IMAGE_DIRECTORY_ENTRY_EXPORT]
-		return rva >= exportDir.VirtualAddress && rva < exportDir.VirtualAddress+exportDir.Size
-	}
-	
-	return false
+func isForwardedExport(moduleBase, funcAddr uintptr) bool {
+    exportRVA, exportSize := getExportDirectoryRange(moduleBase)
+    if exportRVA == 0 || exportSize == 0 {
+        return false
+    }
+    rva := uint32(funcAddr - moduleBase)
+    return rva >= exportRVA && rva < exportRVA+exportSize
+}
+
+type exportIndex struct {
+    name map[uint32]Export // hash(name) -> export
+    ord  map[uint32]Export // ordinal -> export
+}
+
+func getExportIndex(moduleBase uintptr) *exportIndex {
+    if moduleBase == 0 {
+        return nil
+    }
+    exportIndexMutex.RLock()
+    if idx, ok := exportIndexCache[moduleBase]; ok {
+        exportIndexMutex.RUnlock()
+        return idx
+    }
+    exportIndexMutex.RUnlock()
+
+    exports := parseExports(moduleBase)
+    if len(exports) == 0 {
+        return nil
+    }
+    nameMap := make(map[uint32]Export, len(exports))
+    ordMap := make(map[uint32]Export, len(exports))
+    for _, e := range exports {
+        if e.Name != "" {
+            nameMap[obf.GetHash(e.Name)] = e
+        }
+        ordMap[e.Ordinal] = e
+    }
+    idx := &exportIndex{name: nameMap, ord: ordMap}
+    exportIndexMutex.Lock()
+    exportIndexCache[moduleBase] = idx
+    exportIndexMutex.Unlock()
+    return idx
+}
+
+// ClearResolveCaches clears resolve-level caches to avoid stale results
+func ClearResolveCaches() {
+    moduleCacheMutex.Lock()
+    moduleCache = make(map[uint32][]byte)
+    moduleCacheMutex.Unlock()
+
+    functionCacheMutex.Lock()
+    functionCache = make(map[string][]byte)
+    functionCacheMutex.Unlock()
+
+    syscallCacheMutex.Lock()
+    syscallCache = make(map[uint32]uint16)
+    syscallCacheMutex.Unlock()
+
+    exportIndexMutex.Lock()
+    exportIndexCache = make(map[uintptr]*exportIndex)
+    exportIndexMutex.Unlock()
+
+    sortedExports = nil
+    sortedExportsOnce = sync.Once{}
 }
 
 func getForwarderString(funcAddr uintptr) string {

@@ -1,19 +1,20 @@
 package obf
 
 import (
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/binary"
-	"log"
-	"strings"
+    "crypto/rand"
+    "crypto/sha256"
+    "encoding/binary"
+    "log"
+    "strings"
 	"sync"
 	"time"
 	"unsafe"
 )
 
 var (
-	xorKey     []byte
-	keyInitOnce sync.Once
+    xorKey     []byte
+    keyInitOnce sync.Once
+    enableCollisionLogging bool
 )
 
 func generateRuntimeKey() []byte {
@@ -32,24 +33,37 @@ func initXORKey() {
 }
 
 func SetXORKey(key string) {
-	if len(key) == 0 {
-		return 
-	}
-	xorKey = []byte(key)
+    if len(key) == 0 {
+        return 
+    }
+    // Zeroize previous key material
+    if len(xorKey) != 0 {
+        for i := range xorKey { xorKey[i] = 0 }
+    }
+    xorKey = []byte(key)
 }
 
 func Encode(data []byte) []byte {
-	initXORKey()
-	encoded := make([]byte, len(data))
-	for i := 0; i < len(data); i++ {
-		encoded[i] = data[i] ^ xorKey[i%len(xorKey)]
-	}
-	return encoded
+    initXORKey()
+    encoded := make([]byte, len(data))
+    for i := 0; i < len(data); i++ {
+        encoded[i] = data[i] ^ xorKey[i%len(xorKey)]
+    }
+    return encoded
 }
 
 func Decode(encoded []byte) []byte {
-	initXORKey()
-	return Encode(encoded)
+    initXORKey()
+    return Encode(encoded)
+}
+
+// EncodeInPlace XORs the buffer in place using the runtime key
+func EncodeInPlace(buf []byte) {
+    initXORKey()
+    if len(xorKey) == 0 { return }
+    for i := 0; i < len(buf); i++ {
+        buf[i] ^= xorKey[i%len(xorKey)]
+    }
 }
 
 func EncodeUintptr(ptr uintptr) []byte {
@@ -135,25 +149,32 @@ func GetHash(s string) uint32 {
 }
 
 func detectHashCollision(hash uint32, newString string) {
-	collisionMutex.Lock()
-	defer collisionMutex.Unlock()
-	normalizedNew := strings.ToUpper(newString)
+    collisionMutex.Lock()
+    defer collisionMutex.Unlock()
+    normalizedNew := strings.ToUpper(newString)
 
-	if existingString, exists := collisionDetector[hash]; exists {
-		normalizedExisting := strings.ToUpper(existingString)
-		if normalizedExisting != normalizedNew {
-			log.Printf("Warning: Hash collision detected!")
-			log.Printf("  Hash:", hash)
-			log.Printf("  Existing string:", existingString)
-			log.Printf("  New string:", newString)
-		}
-	} else {
-		collisionDetector[hash] = newString
-	}
+    if existingString, exists := collisionDetector[hash]; exists {
+        normalizedExisting := strings.ToUpper(existingString)
+        if normalizedExisting != normalizedNew {
+            if enableCollisionLogging {
+                log.Printf("Warning: Hash collision detected!")
+                log.Printf("  Hash:%v", hash)
+                log.Printf("  Existing string:%s", existingString)
+                log.Printf("  New string:%s", newString)
+            }
+        }
+    } else {
+        collisionDetector[hash] = newString
+    }
 }
 
 func GetHashWithAlgorithm(s string, algorithm string) uint32 {
-	return Hash([]byte(s))
+    return Hash([]byte(s))
+}
+
+// SetCollisionLogging toggles collision logging (disabled by default)
+func SetCollisionLogging(enabled bool) {
+    enableCollisionLogging = enabled
 }
 
 func ClearHashCache() {

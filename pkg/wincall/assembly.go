@@ -118,15 +118,12 @@ func getGetProcAddressAddr() uintptr {
 }
 
 func IsDebuggerPresent() bool {
-	kernel32Hash := obf.GetHash("kernel32.dll")
-	kernel32Base := resolve.GetModuleBase(kernel32Hash)
-	procName, _ := BytePtrFromString("IsDebuggerPresent")
-	isDebuggerPresentAddr := GetProcAddress(kernel32Base, unsafe.Pointer(procName))
-	if isDebuggerPresentAddr == 0 {
-		return false
-	}
-	r1, _ := CallWorker(isDebuggerPresentAddr)
-	return r1 != 0
+    // Use PEB.BeingDebugged to avoid importing or resolving the API name
+    peb := resolve.GetCurrentProcessPEB()
+    if peb == nil {
+        return false
+    }
+    return peb.BeingDebugged != 0
 }
 
 func UTF16PtrFromString(s string) (*uint16, error) {

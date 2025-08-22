@@ -1,13 +1,13 @@
 package resolve
 
 import (
-	"os"
-	"runtime"
-	"unsafe"
-	"github.com/carved4/go-wincall/pkg/errors"
-	"github.com/Binject/debug/pe"
-	"github.com/carved4/go-wincall/pkg/obf"
-	"github.com/carved4/go-wincall/pkg/syscall"
+    "os"
+    "runtime"
+    "unsafe"
+    "github.com/carved4/go-wincall/pkg/errors"
+    "debug/pe"
+    "github.com/carved4/go-wincall/pkg/obf"
+    "github.com/carved4/go-wincall/pkg/syscall"
 )
 
 
@@ -83,10 +83,11 @@ func UnhookNtdll() error {
 	sourceAddr := uintptr(unsafe.Pointer(&cleanTextData[0]))
 	runtime.KeepAlive(cleanTextData)
 
-	for i := uintptr(0); i < textSize; i++ {
-		*(*byte)(unsafe.Pointer(targetAddr + i)) = *(*byte)(unsafe.Pointer(sourceAddr + i))
-	}
-	runtime.KeepAlive(cleanTextData)
+    // Bulk copy with unsafe slice to minimize loops and jitter
+    dst := unsafe.Slice((*byte)(unsafe.Pointer(targetAddr)), int(textSize))
+    src := unsafe.Slice((*byte)(unsafe.Pointer(sourceAddr)), int(textSize))
+    copy(dst, src)
+    runtime.KeepAlive(cleanTextData)
 	
 	var dummy uintptr
 	result2, err := syscall.IndirectSyscall(syscallNum, trampolineAddr,
@@ -97,8 +98,10 @@ func UnhookNtdll() error {
 		uintptr(unsafe.Pointer(&dummy)),
 	)
 	status2 := uint32(result2)
-	if err != nil || status2 != 0 {
-		return errors.New(errors.Err1)
-	}
-	return nil
+    if err != nil || status2 != 0 {
+        return errors.New(errors.Err1)
+    }
+    // Clear resolve caches so next resolutions use clean code
+    ClearResolveCaches()
+    return nil
 }

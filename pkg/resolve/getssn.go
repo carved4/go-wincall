@@ -2,12 +2,11 @@
 package resolve
 
 import (
-	"time"
-	"unsafe"
-	"sort"
-	"github.com/Binject/debug/pe"
-	"github.com/carved4/go-wincall/pkg/errors"
-	"github.com/carved4/go-wincall/pkg/obf"
+    "time"
+    "unsafe"
+    "sort"
+    "github.com/carved4/go-wincall/pkg/errors"
+    "github.com/carved4/go-wincall/pkg/obf"
 )
 
 func GetSyscallNumber(functionHash uint32) uint16 {
@@ -244,37 +243,43 @@ func findSyscallTrampoline(funcAddr uintptr) uintptr {
 
 // findCleanSyscallTrampoline finds any clean syscall;ret gadget in ntdll
 func findCleanSyscallTrampoline() uintptr {
-	exports := getSortedExports()
-	if len(exports) == 0 {
-		return 0
-	}
+    exports := getSortedExports()
+    if len(exports) == 0 {
+        return 0
+    }
 
-	ntdllBase := GetModuleBase(obf.GetHash("ntdll.dll"))
-	if ntdllBase == 0 {
-		return 0
-	}
+    ntdllBase := GetModuleBase(obf.GetHash("ntdll.dll"))
+    if ntdllBase == 0 {
+        return 0
+    }
 
-	// Check several known clean functions for clean trampolines
-	cleanCandidates := []string{
-		"NtQuerySystemInformation",
-		"NtQueryInformationProcess", 
-		"NtQueryVirtualMemory",
-		"NtOpenProcess",
-		"NtClose",
-	}
-
-	for _, candidate := range cleanCandidates {
-		candidateHash := obf.GetHash(candidate)
-		candidateAddr := GetFunctionAddress(ntdllBase, candidateHash)
-		
-		if candidateAddr != 0 && !isHooked(candidateAddr) {
-			if trampoline := findSyscallTrampoline(candidateAddr); trampoline != 0 {
-				return trampoline
-			}
-		}
-	}
-
-	return 0
+    // Scan a subset of exports to find the first clean syscall;ret trampoline
+    // This avoids embedding specific NT/Zw names as literals
+    const maxScan = 256
+    limit := len(exports)
+    if limit > maxScan {
+        limit = maxScan
+    }
+    for i := 0; i < limit; i++ {
+        addr := ntdllBase + uintptr(exports[i].VirtualAddress)
+        if addr == 0 || isHooked(addr) {
+            continue
+        }
+        if trampoline := findSyscallTrampoline(addr); trampoline != 0 {
+            return trampoline
+        }
+    }
+    // Fallback: scan the rest if needed
+    for i := maxScan; i < len(exports); i++ {
+        addr := ntdllBase + uintptr(exports[i].VirtualAddress)
+        if addr == 0 || isHooked(addr) {
+            continue
+        }
+        if trampoline := findSyscallTrampoline(addr); trampoline != 0 {
+            return trampoline
+        }
+    }
+    return 0
 }
 // extractSyscallNumberWithValidation performs enhanced validation and extraction
 func extractSyscallNumberWithValidation(funcAddr uintptr, functionHash uint32) uint16 {
@@ -437,12 +442,12 @@ func GetSyscallWithValidation(functionHash uint32) (uint16, bool, error) {
 	return syscallNum, isValid, nil
 }
 
-func getSortedExports() []pe.Export {
-	sortedExportsOnce.Do(func() {
-		ntdllBase := GetModuleBase(obf.GetHash("ntdll.dll"))
-		if ntdllBase == 0 {
-			return
-		}
+func getSortedExports() []Export {
+    sortedExportsOnce.Do(func() {
+        ntdllBase := GetModuleBase(obf.GetHash("ntdll.dll"))
+        if ntdllBase == 0 {
+            return
+        }
 
 		dosHeader := (*[2]byte)(unsafe.Pointer(ntdllBase))
 		if dosHeader[0] != 'M' || dosHeader[1] != 'Z' {
@@ -455,22 +460,14 @@ func getSortedExports() []pe.Export {
 			return
 		}
 
-		sizeOfImage := *(*uint32)(unsafe.Pointer(ntdllBase + uintptr(peOffset) + 24 + 56))
-		slice := unsafe.Slice((*byte)(unsafe.Pointer(ntdllBase)), sizeOfImage)
-		peFile, err := pe.NewFileFromMemory(&memoryReaderAt{data: slice})
-		if err != nil {
-			return
-		}
-		exports, err := peFile.Exports()
-		if err != nil {
-			return
-		}
-		sort.Slice(exports, func(i, j int) bool {
-			return exports[i].VirtualAddress < exports[j].VirtualAddress
-		})
-		sortedExports = exports
-	})
-	return sortedExports
+        // Build exports directly from memory
+        exports := parseExports(ntdllBase)
+        sort.Slice(exports, func(i, j int) bool {
+            return exports[i].VirtualAddress < exports[j].VirtualAddress
+        })
+        sortedExports = exports
+    })
+    return sortedExports
 }
 
 // GuessSyscallNumber attempts to infer a syscall number for a hooked function
@@ -594,17 +591,4 @@ func GuessSyscallNumber(targetHash uint32) uint16 {
 
 	return 0
 }
-type memoryReaderAt struct {
-	data []byte
-}
-
-func (r *memoryReaderAt) ReadAt(p []byte, off int64) (n int, err error) {
-	if off < 0 || off >= int64(len(r.data)) {
-		return 0, errors.New(errors.Err1)
-	}
-	n = copy(p, r.data[off:])
-	if n < len(p) {
-		err = errors.New(errors.Err1)
-	}
-	return n, err
-}
+// memoryReaderAt removed; no longer needed after replacing binject PE usage

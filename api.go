@@ -1,8 +1,8 @@
 package wincall
 
 import (
-	"fmt"
-	"unicode/utf16"
+    "fmt"
+    "unicode/utf16"
 	"unsafe"
 
 	"github.com/carved4/go-wincall/pkg/errors"
@@ -131,7 +131,14 @@ func NtWaitForSingleObject(handle uintptr, alertable bool, timeout *int64) (uint
 
 // UnhookNtdll restores clean ntdll.dll from disk to remove any hooks
 func UnhookNtdll() error {
-	return resolve.UnhookNtdll()
+    return resolve.UnhookNtdll()
+}
+
+// ClearCaches clears resolve-level and hash caches
+func ClearCaches() {
+    resolve.ClearResolveCaches()
+    // optional: clear hash cache too
+    obf.ClearHashCache()
 }
 
 // GetSyscallWithAntiHook attempts to resolve syscall with anti-hooking measures

