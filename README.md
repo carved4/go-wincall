@@ -33,8 +33,6 @@ after building your binary, run the included strip script to remove github.com i
 ./strip.sh your_binary.exe
 ```
 
-**note**: the decoding keys are hardcoded in the obfuscated output for runtime decoding. this provides reasonable protection against basic static analysis while maintaining functionality.
-
 ## api usage
 
 the library provides two main approaches for calling windows apis: a high-level convenience function and manual resolution for more control.
