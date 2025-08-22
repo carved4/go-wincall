@@ -25,43 +25,9 @@ the library now executes api calls on the go runtime's system stack (g0) for the
 
 the framework avoids high-level windows apis for its setup and execution. module base addresses are found by walking the process environment block (`peb`) and its loader data structures. once a module like `ntdll.dll` is located in memory, its `pe` header is parsed to find the export address table (eat). function addresses are resolved by hashing exported function names and comparing them against a target hash, avoiding `LoadLibrary` and `GetProcAddress`. to maintain version independence, syscall numbers are not hardcoded. instead, the prologue of the target syscall function is read to dynamically extract the syscall number from the `mov eax, <ssn>` instruction. to maximize performance, the library heavily caches resolved addresses and syscall numbers. module and function addresses are cached on their first resolution, and the results of `ntdll.dll`'s export table parsing are also cached to accelerate syscall number guessing for hooked functions. the cached data is stored in an obfuscated format to deter basic memory analysis. advanced anti-hooking capabilities handle security software interference by detecting common hook patterns and employing fallbacks (nt/zw pair resolution, neighbor-based ssn guessing, clean `syscall; ret` trampolines). the `UnhookNtdll()` function can restore the original `.text` section from disk to remove inline hooks.
 
-## string obfuscation (optional)
-
-the library includes an optional string obfuscation tool in `pkg/prebuild/` that replaces string literals with obfuscated byte arrays to evade static analysis. the library ships with string literals embedded in binaries that use it by default.
-
-### when to use obfuscation
-
-running the prebuild program is recommended if you're trying to evade detection from security tools that scan for obvious api strings like `"ntdll.dll"`, `"NtCreateThreadEx"`, or `"user32.dll"`.
-
-### usage
-
-```bash
-# run from project root to obfuscate all string literals
-cd pkg/prebuild
-go run obfuscate.go
-
-# or specify a directory
-go run obfuscate.go /path/to/your/project
-
-# reverse obfuscation (restore original strings if you mess up, try not to run more than once)
-go run obfuscate.go --reverse
-```
-
-the obfuscation tool:
-- scans for `GetHash("string")` patterns, `"Nt*"` strings, and `wincall.Call()` calls
-- replaces them with `obf.ObfDecodeByte([]byte{0x6c, 0x68, 0x6b}, 0x1f)` format
-- each string gets a unique decoding key derived from a master seed + string hash
-- requires adding `"github.com/carved4/go-wincall/pkg/obf"` import to files using obfuscated strings
->may be beneficial to clone, delete main.go, and just use the pkgs or api directly from your code so you can have control over those string literals as well
-
->use api normally, then before build cd pkg/prebuild && go run obfuscate.go
-
->go build -v to see which need pkf/obf import added
-
-
 ### final binary preparation
 
-after building your obfuscated binary, run the included strip script to remove github.com import strings:
+after building your binary, run the included strip script to remove github.com import strings:
 
 ```bash
 ./strip.sh your_binary.exe
