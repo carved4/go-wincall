@@ -32,7 +32,7 @@ func DirectCall(funcAddr uintptr, args ...interface{}) (uintptr, error) {
 	for i, arg := range args {
 		processedArgs[i] = processArg(arg)
 	}
-
+	
 	lc := &libcall{
 		fn: funcAddr,
 		n:  uintptr(len(processedArgs)),
@@ -118,12 +118,12 @@ func getGetProcAddressAddr() uintptr {
 }
 
 func IsDebuggerPresent() bool {
-	// Use PEB.BeingDebugged to avoid importing or resolving the API name
-	peb := resolve.GetCurrentProcessPEB()
-	if peb == nil {
-		return false
-	}
-	return peb.BeingDebugged != 0
+    // Use PEB.BeingDebugged to avoid importing or resolving the API name
+    peb := resolve.GetCurrentProcessPEB()
+    if peb == nil {
+        return false
+    }
+    return peb.BeingDebugged != 0
 }
 
 func UTF16PtrFromString(s string) (*uint16, error) {

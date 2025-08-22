@@ -1,15 +1,14 @@
 package resolve
 
 import (
-    "os"
-    "runtime"
-    "unsafe"
-    "github.com/carved4/go-wincall/pkg/errors"
-    "debug/pe"
-    "github.com/carved4/go-wincall/pkg/obf"
-    "github.com/carved4/go-wincall/pkg/syscall"
+	"os"
+	"runtime"
+	"unsafe"
+	"github.com/carved4/go-wincall/pkg/errors"
+	"debug/pe"
+	"github.com/carved4/go-wincall/pkg/obf"
+	"github.com/carved4/go-wincall/pkg/syscall"
 )
-
 
 func UnhookNtdll() error {
 	ntdllHash := obf.GetHash("ntdll.dll")
@@ -23,13 +22,12 @@ func UnhookNtdll() error {
 		systemRoot = "C:\\Windows"
 	}
 	cleanNtdllPath := systemRoot + "\\System32\\ntdll.dll"
-	
+
 	cleanPE, err := pe.Open(cleanNtdllPath)
 	if err != nil {
 		return errors.New(errors.Err1)
 	}
 	defer cleanPE.Close()
-	
 
 	var textSection *pe.Section
 	for _, section := range cleanPE.Sections {
@@ -51,16 +49,16 @@ func UnhookNtdll() error {
 	if textSize > maxSize {
 		textSize = maxSize
 	}
-	currentProcess := uintptr(0xffffffffffffffff)	
+	currentProcess := uintptr(0xffffffffffffffff)
 
 	var oldProtect uintptr
-	
+
 	ntProtectHash := obf.GetHash("NtProtectVirtualMemory")
 	syscallNum, trampolineAddr := GetSyscallAndAddress(ntProtectHash)
 	if syscallNum == 0 {
 		return errors.New(errors.Err1)
 	}
-	
+
 	result, err := syscall.IndirectSyscall(syscallNum, trampolineAddr,
 		currentProcess,
 		uintptr(unsafe.Pointer(&targetAddr)),
@@ -72,23 +70,23 @@ func UnhookNtdll() error {
 	if err != nil {
 		return errors.New(errors.Err1)
 	}
-	
+
 	if status != 0 {
 		return errors.New(errors.Err1)
 	}
-	
+
 	if len(cleanTextData) == 0 {
 		return errors.New(errors.Err1)
 	}
 	sourceAddr := uintptr(unsafe.Pointer(&cleanTextData[0]))
 	runtime.KeepAlive(cleanTextData)
 
-    // Bulk copy with unsafe slice to minimize loops and jitter
-    dst := unsafe.Slice((*byte)(unsafe.Pointer(targetAddr)), int(textSize))
-    src := unsafe.Slice((*byte)(unsafe.Pointer(sourceAddr)), int(textSize))
-    copy(dst, src)
-    runtime.KeepAlive(cleanTextData)
-	
+	// Bulk copy with unsafe slice to minimize loops and jitter
+	dst := unsafe.Slice((*byte)(unsafe.Pointer(targetAddr)), int(textSize))
+	src := unsafe.Slice((*byte)(unsafe.Pointer(sourceAddr)), int(textSize))
+	copy(dst, src)
+	runtime.KeepAlive(cleanTextData)
+
 	var dummy uintptr
 	result2, err := syscall.IndirectSyscall(syscallNum, trampolineAddr,
 		currentProcess,
@@ -98,10 +96,10 @@ func UnhookNtdll() error {
 		uintptr(unsafe.Pointer(&dummy)),
 	)
 	status2 := uint32(result2)
-    if err != nil || status2 != 0 {
-        return errors.New(errors.Err1)
-    }
-    // Clear resolve caches so next resolutions use clean code
-    ClearResolveCaches()
-    return nil
+	if err != nil || status2 != 0 {
+		return errors.New(errors.Err1)
+	}
+	// Clear resolve caches so next resolutions use clean code
+	ClearResolveCaches()
+	return nil
 }

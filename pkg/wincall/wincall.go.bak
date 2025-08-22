@@ -13,27 +13,28 @@ import (
 )
 
 var (
-	ntAllocateVirtualMemoryNum    uint16
-	ntAllocateVirtualMemoryAddr   uintptr
-	ntWriteVirtualMemoryNum       uint16
-	ntWriteVirtualMemoryAddr      uintptr
-	ntReadVirtualMemoryNum        uint16
-	ntReadVirtualMemoryAddr       uintptr
-	ntProtectVirtualMemoryNum     uint16
-	ntProtectVirtualMemoryAddr    uintptr
-	ntCreateEventNum              uint16
-	ntCreateEventAddr             uintptr
-	ntSetEventNum                 uint16
-	ntSetEventAddr                uintptr
-	ntCreateThreadExNum           uint16
-	ntCreateThreadExAddr          uintptr
-	ntWaitForSingleObjectNum      uint16
-	ntWaitForSingleObjectAddr     uintptr
-	ntQueryInformationThreadNum   uint16
-	ntQueryInformationThreadAddr  uintptr
-	ntQueryInformationProcessNum  uint16
-	ntQueryInformationProcessAddr uintptr
-	resolveSyscallsOnce           sync.Once
+	ntAllocateVirtualMemoryNum     uint16
+	ntAllocateVirtualMemoryAddr    uintptr
+	ntWriteVirtualMemoryNum        uint16
+	ntWriteVirtualMemoryAddr       uintptr
+	ntReadVirtualMemoryNum         uint16
+	ntReadVirtualMemoryAddr        uintptr
+	ntProtectVirtualMemoryNum      uint16
+	ntProtectVirtualMemoryAddr     uintptr
+	ntCreateEventNum               uint16
+	ntCreateEventAddr              uintptr
+	ntSetEventNum                  uint16
+	ntSetEventAddr                 uintptr
+	ntCreateThreadExNum            uint16
+	ntCreateThreadExAddr           uintptr
+	ntWaitForSingleObjectNum       uint16
+	ntWaitForSingleObjectAddr      uintptr
+	ntQueryInformationThreadNum    uint16
+	ntQueryInformationThreadAddr   uintptr
+	ntQueryInformationProcessNum   uint16
+	ntQueryInformationProcessAddr  uintptr
+	resolveSyscallsOnce            sync.Once
+
 )
 
 func resolveSyscalls() {
@@ -257,10 +258,10 @@ func GetCurrentThreadId() (uint32, error) {
 	// Get current thread handle
 	const getCurrentThread = uintptr(0xFFFFFFFFFFFFFFFE) // Current thread pseudo-handle
 	const threadBasicInformation = 0
-
+	
 	var tbi ThreadBasicInformation
 	var returnLength uintptr
-
+	
 	status, err := NtQueryInformationThread(
 		getCurrentThread,
 		threadBasicInformation,
@@ -268,11 +269,11 @@ func GetCurrentThreadId() (uint32, error) {
 		uintptr(unsafe.Sizeof(tbi)),
 		&returnLength,
 	)
-
+	
 	if err != nil || status != 0 {
 		return 0, errors.New(errors.Err1)
 	}
-
+	
 	return uint32(tbi.ClientIdThread), nil
 }
 
@@ -297,7 +298,7 @@ func NtQueryInformationProcess(processHandle uintptr, processInformationClass ui
 func (w *Worker) encryptSharedMem() {
 	w.sharedMemMtx.Lock()
 	defer w.sharedMemMtx.Unlock()
-
+	
 	libcallData := make([]byte, libcallSize)
 	var bytesRead uintptr
 	status, err := NtReadVirtualMemory(
@@ -307,43 +308,41 @@ func (w *Worker) encryptSharedMem() {
 		libcallSize,
 		&bytesRead,
 	)
-
+	
 	if err != nil || status != 0 || bytesRead != libcallSize {
 		return
 	}
-
-	// Encrypt in place to minimize allocations
-	obf.EncodeInPlace(libcallData)
-
+	
+    // Encrypt in place to minimize allocations
+    obf.EncodeInPlace(libcallData)
+	
 	var bytesWritten uintptr
-	status, err = NtWriteVirtualMemory(
-		0xFFFFFFFFFFFFFFFF, // Current process
-		w.sharedMem,
-		uintptr(unsafe.Pointer(&libcallData[0])),
-		libcallSize,
-		&bytesWritten,
-	)
-
-	if err != nil || status != 0 || bytesWritten != libcallSize {
-		NtWriteVirtualMemory(
-			0xFFFFFFFFFFFFFFFF,
-			w.sharedMem,
-			uintptr(unsafe.Pointer(&libcallData[0])),
-			libcallSize,
-			&bytesWritten,
-		)
-	}
-	// Zeroize sensitive buffers
-	for i := range libcallData {
-		libcallData[i] = 0
-	}
+    status, err = NtWriteVirtualMemory(
+        0xFFFFFFFFFFFFFFFF, // Current process
+        w.sharedMem,
+        uintptr(unsafe.Pointer(&libcallData[0])),
+        libcallSize,
+        &bytesWritten,
+    )
+	
+    if err != nil || status != 0 || bytesWritten != libcallSize {
+        NtWriteVirtualMemory(
+            0xFFFFFFFFFFFFFFFF,
+            w.sharedMem,
+            uintptr(unsafe.Pointer(&libcallData[0])),
+            libcallSize,
+            &bytesWritten,
+        )
+    }
+    // Zeroize sensitive buffers
+    for i := range libcallData { libcallData[i] = 0 }
 }
 
 func (w *Worker) decryptSharedMem() {
 	w.sharedMemMtx.Lock()
 	defer w.sharedMemMtx.Unlock()
-
-	encryptedData := make([]byte, libcallSize)
+	
+    encryptedData := make([]byte, libcallSize)
 	var bytesRead uintptr
 	status, err := NtReadVirtualMemory(
 		0xFFFFFFFFFFFFFFFF, // Current process
@@ -352,42 +351,40 @@ func (w *Worker) decryptSharedMem() {
 		libcallSize,
 		&bytesRead,
 	)
-
+	
 	if err != nil || status != 0 || bytesRead != libcallSize {
 		return
 	}
-
-	// Decrypt in place
-	obf.EncodeInPlace(encryptedData)
-
+	
+    // Decrypt in place
+    obf.EncodeInPlace(encryptedData)
+	
 	var bytesWritten uintptr
-	status, err = NtWriteVirtualMemory(
-		0xFFFFFFFFFFFFFFFF, // Current process
-		w.sharedMem,
-		uintptr(unsafe.Pointer(&encryptedData[0])),
-		libcallSize,
-		&bytesWritten,
-	)
-
-	if err != nil || status != 0 || bytesWritten != libcallSize {
-		// we should never get here, kill ourselves
-		runtime.Goexit()
-	}
-	// Zeroize sensitive buffers
-	for i := range encryptedData {
-		encryptedData[i] = 0
-	}
+    status, err = NtWriteVirtualMemory(
+        0xFFFFFFFFFFFFFFFF, // Current process
+        w.sharedMem,
+        uintptr(unsafe.Pointer(&encryptedData[0])),
+        libcallSize,
+        &bytesWritten,
+    )
+	
+    if err != nil || status != 0 || bytesWritten != libcallSize {
+        // we should never get here, kill ourselves
+        runtime.Goexit()
+    }
+    // Zeroize sensitive buffers
+    for i := range encryptedData { encryptedData[i] = 0 }
 }
 
 func workerDispatcher() {
 	worker := GetWorker()
-
+	
 	// Get the current Go worker thread ID
 	threadId, err := GetCurrentThreadId()
 	if err == nil {
 		worker.goWorkerThreadId = threadId
 	}
-
+	
 	for task := range worker.tasks {
 		worker.placeArgsInSharedMem(task)
 
@@ -408,7 +405,7 @@ func workerDispatcher() {
 		}
 
 		result := worker.retrieveResultFromSharedMem()
-
+		
 		worker.encryptSharedMem()
 
 		task.completion <- taskResult{result, nil}
@@ -554,7 +551,7 @@ func (w *Worker) retrieveNativeWorkerThreadId() error {
 	// Use NtQueryInformationThread to get the thread ID of the native worker thread
 	var tbi ThreadBasicInformation
 	var returnLength uintptr
-
+	
 	status, err := NtQueryInformationThread(
 		w.hWorkerThread,
 		0, // ThreadBasicInformation
@@ -562,11 +559,11 @@ func (w *Worker) retrieveNativeWorkerThreadId() error {
 		uintptr(unsafe.Sizeof(tbi)),
 		&returnLength,
 	)
-
+	
 	if err != nil || status != 0 {
 		return errors.New(errors.Err1)
 	}
-
+	
 	w.nativeWorkerThreadId = uint32(tbi.ClientIdThread)
 	return nil
 }
@@ -576,7 +573,7 @@ func GetWorkerThreadIds() (nativeThreadId uint32, goThreadId uint32, err error) 
 	if err := Init(); err != nil {
 		return 0, 0, err
 	}
-
+	
 	worker := GetWorker()
 	return worker.nativeWorkerThreadId, worker.goWorkerThreadId, nil
 }

@@ -1,12 +1,11 @@
-
 package resolve
 
 import (
-    "time"
-    "unsafe"
-    "sort"
-    "github.com/carved4/go-wincall/pkg/errors"
-    "github.com/carved4/go-wincall/pkg/obf"
+	"time"
+	"unsafe"
+	"sort"
+	"github.com/carved4/go-wincall/pkg/errors"
+	"github.com/carved4/go-wincall/pkg/obf"
 )
 
 func GetSyscallNumber(functionHash uint32) uint16 {
@@ -18,45 +17,45 @@ func GetSyscallNumber(functionHash uint32) uint16 {
 	syscallCacheMutex.RUnlock()
 
 	ntdllHash := obf.GetHash("ntdll.dll")
-	
+
 	var ntdllBase uintptr
 	maxRetries := 8
 	baseDelay := 50 * time.Millisecond
-	
+
 	for i := 0; i < maxRetries; i++ {
 		ntdllBase = GetModuleBase(ntdllHash)
 		if ntdllBase != 0 {
 			break
 		}
-		
+
 		delay := baseDelay * time.Duration(1<<uint(i))
 		if delay > 2*time.Second {
 			delay = 2 * time.Second
 		}
-		
+
 		time.Sleep(delay)
 	}
-	
+
 	if ntdllBase == 0 {
 		return 0
 	}
-	
+
 	var funcAddr uintptr
-	
+
 	for i := 0; i < maxRetries; i++ {
 		funcAddr = GetFunctionAddress(ntdllBase, functionHash)
 		if funcAddr != 0 {
 			break
 		}
-		
+
 		delay := baseDelay * time.Duration(1<<uint(i))
 		if delay > 2*time.Second {
 			delay = 2 * time.Second
 		}
-		
+
 		time.Sleep(delay)
 	}
-	
+
 	if funcAddr == 0 {
 		return 0
 	}
@@ -158,7 +157,7 @@ func isHooked(funcAddr uintptr) bool {
 	if funcBytes[0] == 0xe9 || funcBytes[0] == 0xeb { // JMP near/short
 		return true
 	}
-	
+
 	// Check for JMP indirect
 	if funcBytes[0] == 0xff && (funcBytes[1]&0xf8) == 0x20 { // JMP [mem]
 		return true
@@ -233,8 +232,8 @@ func findSyscallTrampoline(funcAddr uintptr) uintptr {
 	for i := uintptr(0); i < 64; i++ {
 		addr := funcAddr + i
 		if *(*byte)(unsafe.Pointer(addr)) == 0x0f &&
-			*(*byte)(unsafe.Pointer(addr+1)) == 0x05 &&
-			*(*byte)(unsafe.Pointer(addr+2)) == 0xc3 {
+			*(*byte)(unsafe.Pointer(addr + 1)) == 0x05 &&
+			*(*byte)(unsafe.Pointer(addr + 2)) == 0xc3 {
 			return addr
 		}
 	}
@@ -243,44 +242,45 @@ func findSyscallTrampoline(funcAddr uintptr) uintptr {
 
 // findCleanSyscallTrampoline finds any clean syscall;ret gadget in ntdll
 func findCleanSyscallTrampoline() uintptr {
-    exports := getSortedExports()
-    if len(exports) == 0 {
-        return 0
-    }
+	exports := getSortedExports()
+	if len(exports) == 0 {
+		return 0
+	}
 
-    ntdllBase := GetModuleBase(obf.GetHash("ntdll.dll"))
-    if ntdllBase == 0 {
-        return 0
-    }
+	ntdllBase := GetModuleBase(obf.GetHash("ntdll.dll"))
+	if ntdllBase == 0 {
+		return 0
+	}
 
-    // Scan a subset of exports to find the first clean syscall;ret trampoline
-    // This avoids embedding specific NT/Zw names as literals
-    const maxScan = 256
-    limit := len(exports)
-    if limit > maxScan {
-        limit = maxScan
-    }
-    for i := 0; i < limit; i++ {
-        addr := ntdllBase + uintptr(exports[i].VirtualAddress)
-        if addr == 0 || isHooked(addr) {
-            continue
-        }
-        if trampoline := findSyscallTrampoline(addr); trampoline != 0 {
-            return trampoline
-        }
-    }
-    // Fallback: scan the rest if needed
-    for i := maxScan; i < len(exports); i++ {
-        addr := ntdllBase + uintptr(exports[i].VirtualAddress)
-        if addr == 0 || isHooked(addr) {
-            continue
-        }
-        if trampoline := findSyscallTrampoline(addr); trampoline != 0 {
-            return trampoline
-        }
-    }
-    return 0
+	// Scan a subset of exports to find the first clean syscall;ret trampoline
+	// This avoids embedding specific NT/Zw names as literals
+	const maxScan = 256
+	limit := len(exports)
+	if limit > maxScan {
+		limit = maxScan
+	}
+	for i := 0; i < limit; i++ {
+		addr := ntdllBase + uintptr(exports[i].VirtualAddress)
+		if addr == 0 || isHooked(addr) {
+			continue
+		}
+		if trampoline := findSyscallTrampoline(addr); trampoline != 0 {
+			return trampoline
+		}
+	}
+	// Fallback: scan the rest if needed
+	for i := maxScan; i < len(exports); i++ {
+		addr := ntdllBase + uintptr(exports[i].VirtualAddress)
+		if addr == 0 || isHooked(addr) {
+			continue
+		}
+		if trampoline := findSyscallTrampoline(addr); trampoline != 0 {
+			return trampoline
+		}
+	}
+	return 0
 }
+
 // extractSyscallNumberWithValidation performs enhanced validation and extraction
 func extractSyscallNumberWithValidation(funcAddr uintptr, functionHash uint32) uint16 {
 	if funcAddr == 0 {
@@ -290,7 +290,7 @@ func extractSyscallNumberWithValidation(funcAddr uintptr, functionHash uint32) u
 	// Read enough bytes to analyze the function
 	const maxBytes = 32
 	funcBytes := make([]byte, maxBytes)
-	
+
 	// Safely read memory with bounds checking
 	for i := 0; i < maxBytes; i++ {
 		funcBytes[i] = *(*byte)(unsafe.Pointer(funcAddr + uintptr(i)))
@@ -298,7 +298,7 @@ func extractSyscallNumberWithValidation(funcAddr uintptr, functionHash uint32) u
 
 	// Try multiple syscall stub patterns for robustness
 	syscallNumber := tryExtractSyscallNumber(funcBytes, funcAddr, functionHash)
-	
+
 	// Validate the extracted syscall number
 	if syscallNumber > 0 && validateSyscallNumber(syscallNumber, functionHash) {
 		return syscallNumber
@@ -321,7 +321,7 @@ func tryExtractSyscallNumber(funcBytes []byte, funcAddr uintptr, functionHash ui
 	if len(funcBytes) >= 8 &&
 		funcBytes[0] == 0x4c && funcBytes[1] == 0x8b && funcBytes[2] == 0xd1 &&
 		funcBytes[3] == 0xb8 {
-		
+
 		syscallNum := uint16(funcBytes[4]) | (uint16(funcBytes[5]) << 8)
 		if syscallNum > 0 && syscallNum < 2000 { // Reasonable range check
 			return syscallNum
@@ -334,7 +334,7 @@ func tryExtractSyscallNumber(funcBytes []byte, funcAddr uintptr, functionHash ui
 	if len(funcBytes) >= 8 &&
 		funcBytes[0] == 0xb8 &&
 		funcBytes[5] == 0x4c && funcBytes[6] == 0x8b && funcBytes[7] == 0xd1 {
-		
+
 		syscallNum := uint16(funcBytes[1]) | (uint16(funcBytes[2]) << 8)
 		if syscallNum > 0 && syscallNum < 2000 {
 			return syscallNum
@@ -431,23 +431,23 @@ func tryAlternativeExtractionMethods(funcBytes []byte, funcAddr uintptr, functio
 // GetSyscallWithValidation provides additional metadata and validation
 func GetSyscallWithValidation(functionHash uint32) (uint16, bool, error) {
 	syscallNum := GetSyscallNumber(functionHash)
-	
+
 	if syscallNum == 0 {
 		return 0, false, errors.New(errors.Err1)
 	}
 
 	// Additional validation
 	isValid := validateSyscallNumber(syscallNum, functionHash)
-	
+
 	return syscallNum, isValid, nil
 }
 
 func getSortedExports() []Export {
-    sortedExportsOnce.Do(func() {
-        ntdllBase := GetModuleBase(obf.GetHash("ntdll.dll"))
-        if ntdllBase == 0 {
-            return
-        }
+	sortedExportsOnce.Do(func() {
+		ntdllBase := GetModuleBase(obf.GetHash("ntdll.dll"))
+		if ntdllBase == 0 {
+			return
+		}
 
 		dosHeader := (*[2]byte)(unsafe.Pointer(ntdllBase))
 		if dosHeader[0] != 'M' || dosHeader[1] != 'Z' {
@@ -460,14 +460,14 @@ func getSortedExports() []Export {
 			return
 		}
 
-        // Build exports directly from memory
-        exports := parseExports(ntdllBase)
-        sort.Slice(exports, func(i, j int) bool {
-            return exports[i].VirtualAddress < exports[j].VirtualAddress
-        })
-        sortedExports = exports
-    })
-    return sortedExports
+		// Build exports directly from memory
+		exports := parseExports(ntdllBase)
+		sort.Slice(exports, func(i, j int) bool {
+			return exports[i].VirtualAddress < exports[j].VirtualAddress
+		})
+		sortedExports = exports
+	})
+	return sortedExports
 }
 
 // GuessSyscallNumber attempts to infer a syscall number for a hooked function
@@ -477,13 +477,15 @@ func GuessSyscallNumber(targetHash uint32) uint16 {
 	if len(exports) == 0 {
 		return 0
 	}
-	
-	ntdllBase := GetModuleBase(obf.GetHash("ntdll.dll"))
+
+	ntdllBase := GetModuleBase(obf.GetHash("ntdll.dll",
+
+	// Find the target function
+	))
 	if ntdllBase == 0 {
 		return 0
 	}
 
-	// Find the target function
 	targetIndex := -1
 	for i, exp := range exports {
 		if obf.GetHash(exp.Name) == targetHash {
@@ -514,7 +516,7 @@ func GuessSyscallNumber(targetHash uint32) uint16 {
 		}
 		// Check if one starts with Nt and other with Zw, and rest is same
 		if (name1[:2] == "Nt" && name2[:2] == "Zw" && name1[2:] == name2[2:]) ||
-		   (name1[:2] == "Zw" && name2[:2] == "Nt" && name1[2:] == name2[2:]) {
+			(name1[:2] == "Zw" && name2[:2] == "Nt" && name1[2:] == name2[2:]) {
 			return true
 		}
 		return false
@@ -525,7 +527,7 @@ func GuessSyscallNumber(targetHash uint32) uint16 {
 		if offset == 0 {
 			continue
 		}
-		
+
 		pairIdx := targetIndex + offset
 		if pairIdx < 0 || pairIdx >= len(exports) {
 			continue
@@ -551,7 +553,7 @@ func GuessSyscallNumber(targetHash uint32) uint16 {
 		}
 	}
 
-	// Find clean right neighbor  
+	// Find clean right neighbor
 	var rightSyscall uint16
 	var rightIndex int = -1
 	for i := targetIndex + 1; i < len(exports) && i <= targetIndex+10; i++ {
@@ -569,7 +571,7 @@ func GuessSyscallNumber(targetHash uint32) uint16 {
 		positionDiff := targetIndex - leftIndex
 		syscallDiff := rightSyscall - leftSyscall
 		indexDiff := rightIndex - leftIndex
-		
+
 		if indexDiff > 0 {
 			interpolated := leftSyscall + uint16((syscallDiff*uint16(positionDiff))/uint16(indexDiff))
 			return interpolated
@@ -591,4 +593,5 @@ func GuessSyscallNumber(targetHash uint32) uint16 {
 
 	return 0
 }
+
 // memoryReaderAt removed; no longer needed after replacing binject PE usage
