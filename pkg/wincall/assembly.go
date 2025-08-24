@@ -55,6 +55,8 @@ func DirectCall(funcAddr uintptr, args ...interface{}) (uintptr, error) {
 
     // Keep original arguments alive until after the call completes.
     runtime.KeepAlive(args)
+    // Zeroize temporary processed arguments to reduce memory forensics residue.
+    for i := range processedArgs { processedArgs[i] = 0 }
     return lc.r1, nil
 }
 
@@ -75,11 +77,11 @@ func CallG0(funcAddr uintptr, args ...interface{}) (uintptr, error) {
 }
 
 func initAddresses() {
-	maxRetries := 10
+    maxRetries := 10
 
-	for i := 0; i < maxRetries; i++ {
-		kernel32Hash := obf.GetHash("kernel32.dll")
-		kernel32Base := resolve.GetModuleBase(kernel32Hash)
+    for i := 0; i < maxRetries; i++ {
+        kernel32Hash := obf.GetHash("kernel32.dll")
+        kernel32Base := resolve.GetModuleBase(kernel32Hash)
 
 		if kernel32Base != 0 {
 			loadLibraryWHash := obf.GetHash("LoadLibraryW")
@@ -93,37 +95,42 @@ func initAddresses() {
 			}
 		}
 
-		waitTime := time.Duration(10+i*10) * time.Millisecond
-		if waitTime > 100*time.Millisecond {
-			waitTime = 100 * time.Millisecond
-		}
-		time.Sleep(waitTime)
-	}
+        // Add slight jitter to avoid deterministic timing
+        jitter := time.Duration((time.Now().UnixNano()>>uint(i%7))%3) * time.Millisecond
+        waitTime := time.Duration(10+i*10) * time.Millisecond
+        waitTime += jitter
+        if waitTime > 100*time.Millisecond {
+            waitTime = 100 * time.Millisecond
+        }
+        time.Sleep(waitTime)
+    }
 }
 
 func LoadLibraryW(name string) uintptr {
     namePtr, _ := UTF16PtrFromString(name)
 
-	maxRetries := 5
+    maxRetries := 5
 
-	for i := 0; i < maxRetries; i++ {
-		loadLibraryAddr := getLoadLibraryWAddr()
-		if loadLibraryAddr == 0 {
-			time.Sleep(time.Duration(10+i*20) * time.Millisecond)
-			continue
-		}
+    for i := 0; i < maxRetries; i++ {
+        loadLibraryAddr := getLoadLibraryWAddr()
+        if loadLibraryAddr == 0 {
+            jitter := time.Duration((time.Now().UnixNano()>>uint(i%5))%5) * time.Millisecond
+            time.Sleep(time.Duration(10+i*20)*time.Millisecond + jitter)
+            continue
+        }
 
         r1, _ := CallG0(loadLibraryAddr, namePtr)
         if r1 != 0 {
             return r1
         }
 
-		if i < maxRetries-1 {
-			time.Sleep(time.Duration(50+i*50) * time.Millisecond)
-		}
-	}
-	// we should never get here
-	return 0
+        if i < maxRetries-1 {
+            jitter := time.Duration((time.Now().UnixNano()>>uint(i%5))%7) * time.Millisecond
+            time.Sleep(time.Duration(50+i*50)*time.Millisecond + jitter)
+        }
+    }
+    // we should never get here
+    return 0
 }
 
 func GetProcAddress(moduleHandle uintptr, proc unsafe.Pointer) uintptr {

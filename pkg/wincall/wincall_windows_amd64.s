@@ -1,12 +1,6 @@
 #include "go_asm.h"
 #include "textflag.h"
 
-// Standard stdcall trampoline.
-// This part remains unchanged. It executes a function pointer with arguments.
-TEXT wincall_asmstdcall_trampoline(SB),NOSPLIT,$0
-	MOVQ	AX, CX
-	JMP	wincall_asmstdcall(SB)
-
 TEXT wincall_asmstdcall(SB),NOSPLIT,$256
 	MOVQ	SP, AX
 	ANDQ	$~15, SP	// Windows x64 stack alignment

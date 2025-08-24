@@ -23,6 +23,8 @@ var (
     ntQueryInformationThreadAddr  uintptr
     ntQueryInformationProcessNum  uint16
     ntQueryInformationProcessAddr uintptr
+    ntFlushInstructionCacheNum    uint16
+    ntFlushInstructionCacheAddr   uintptr
     resolveSyscallsOnce           sync.Once
 )
 
@@ -33,6 +35,7 @@ func resolveSyscalls() {
     ntProtectVirtualMemoryNum, ntProtectVirtualMemoryAddr = resolve.GetSyscallAndAddress(obf.GetHash("NtProtectVirtualMemory"))
     ntQueryInformationThreadNum, ntQueryInformationThreadAddr = resolve.GetSyscallAndAddress(obf.GetHash("NtQueryInformationThread"))
     ntQueryInformationProcessNum, ntQueryInformationProcessAddr = resolve.GetSyscallAndAddress(obf.GetHash("NtQueryInformationProcess"))
+    ntFlushInstructionCacheNum, ntFlushInstructionCacheAddr = resolve.GetSyscallAndAddress(obf.GetHash("NtFlushInstructionCache"))
 }
 
 func NtAllocateVirtualMemory(processHandle uintptr, baseAddress *uintptr, zeroBits uintptr, regionSize *uintptr, allocationType uintptr, protect uintptr) (uint32, error) {
@@ -178,6 +181,22 @@ func NtQueryInformationProcess(processHandle uintptr, processInformationClass ui
 		return uint32(ret), err
 	}
 	return uint32(ret), nil
+}
+
+func NtFlushInstructionCache(processHandle uintptr, baseAddress uintptr, length uintptr) (uint32, error) {
+    resolveSyscallsOnce.Do(resolveSyscalls)
+    if ntFlushInstructionCacheNum == 0 {
+        return 0xC0000139, errors.New(errors.Err1)
+    }
+    ret, err := syscall.IndirectSyscall(ntFlushInstructionCacheNum, ntFlushInstructionCacheAddr,
+        processHandle,
+        baseAddress,
+        length,
+    )
+    if err != nil {
+        return uint32(ret), err
+    }
+    return uint32(ret), nil
 }
 
 // (all worker-thread code removed)

@@ -102,9 +102,13 @@ func Call(dllName, funcName interface{}, args ...interface{}) (uintptr, error) {
 }
 
 func UTF16ptr(s string) (*uint16, error) {
-	ptr, err := wincall.UTF16PtrFromString(s)
-	return ptr, err
+    ptr, err := wincall.UTF16PtrFromString(s)
+    return ptr, err
 }
+
+// Callback configuration and pointer exposure for foreign callers
+func SetCallbackN(fn uintptr, args ...uintptr) error { return wincall.SetCallbackN(fn, args...) }
+func CallbackPtr() uintptr { return wincall.CallbackPtr() }
 
 // NT* syscall wrappers
 func NtAllocateVirtualMemory(processHandle uintptr, baseAddress *uintptr, zeroBits uintptr, regionSize *uintptr, allocationType uintptr, protect uintptr) (uint32, error) {
