@@ -3,12 +3,13 @@ package wincall
 import (
     "fmt"
     "unicode/utf16"
-	"unsafe"
+    "unsafe"
 
-	"github.com/carved4/go-wincall/pkg/errors"
-	"github.com/carved4/go-wincall/pkg/obf"
-	"github.com/carved4/go-wincall/pkg/resolve"
-	"github.com/carved4/go-wincall/pkg/wincall"
+    "github.com/carved4/go-wincall/pkg/errors"
+    "github.com/carved4/go-wincall/pkg/obf"
+    "github.com/carved4/go-wincall/pkg/resolve"
+    "github.com/carved4/go-wincall/pkg/wincall"
+    pkgsys "github.com/carved4/go-wincall/pkg/syscall"
 )
 
 func init() {
@@ -109,6 +110,17 @@ func UTF16ptr(s string) (*uint16, error) {
 // Callback configuration and pointer exposure for foreign callers
 func SetCallbackN(fn uintptr, args ...uintptr) error { return wincall.SetCallbackN(fn, args...) }
 func CallbackPtr() uintptr { return wincall.CallbackPtr() }
+
+// Expose syscall helpers for convenience in callers
+func Syscall(syscallNum uint16, args ...uintptr) (uintptr, error) {
+    return pkgsys.Syscall(syscallNum, args...)
+}
+func IndirectSyscall(syscallNum uint16, syscallAddr uintptr, args ...uintptr) (uintptr, error) {
+    return pkgsys.IndirectSyscall(syscallNum, syscallAddr, args...)
+}
+
+
+func SyscallDirectCallbackPtr() uintptr { return wincall.SyscallDirectEntryPC }
 
 // NT* syscall wrappers
 func NtAllocateVirtualMemory(processHandle uintptr, baseAddress *uintptr, zeroBits uintptr, regionSize *uintptr, allocationType uintptr, protect uintptr) (uint32, error) {

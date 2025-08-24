@@ -36,3 +36,5 @@ var CallbackEntryPC uintptr
 
 // CallbackPtr returns the raw code pointer to CallbackEntry.
 func CallbackPtr() uintptr { return CallbackEntryPC }
+
+var SyscallDirectEntryPC uintptr

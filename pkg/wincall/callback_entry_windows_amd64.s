@@ -1,4 +1,3 @@
-//go:build windows && amd64
 #include "go_asm.h"
 #include "textflag.h"
 
@@ -11,4 +10,3 @@ TEXT ·CallbackEntry(SB),NOSPLIT,$0-0
 // Export raw function pointer for Go code to hand out.
 GLOBL ·CallbackEntryPC(SB), RODATA, $8
 DATA ·CallbackEntryPC+0(SB)/8, $·CallbackEntry(SB)
-
