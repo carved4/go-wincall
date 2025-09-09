@@ -1,32 +1,36 @@
 package main
 
 import (
-    "bufio"
-    "fmt"
-    "os"
-    "strconv"
-    "strings"
-    "runtime"
-    "unsafe"
-    "github.com/carved4/go-wincall"
+	"bufio"
+	"fmt"
+	"os"
+	"runtime"
+	"strconv"
+	"strings"
+	"unsafe"
+
+	"github.com/carved4/go-wincall"
+	"github.com/carved4/go-wincall/pkg/resolve"
 )
 
 func main() {
-    // Pin the main goroutine to a single OS thread so all g0 calls
-    // in this process run on the same thread for consistent TID.
-    runtime.LockOSThread()
-    wincall.UnhookNtdll()
-    if wincall.IsDebuggerPresent() {
-        os.Exit(1)
-    }
-    fmt.Println("go-wincall demo :3")
-    // Verify g0 execution using a tiny NOSPLIT TEB reader to avoid stack growth
-    tidBefore := wincall.CurrentThreadIDFast()
-    var tidOnG0 uint32
-    wincall.RunOnG0(func(){ tidOnG0 = wincall.CurrentThreadIDFast() })
-    fmt.Printf("current thread id: %d\n", tidBefore)
-    fmt.Printf("current thread id (on g0): %d (same=%v)\n", tidOnG0, tidOnG0 == tidBefore)
-    showMenu()
+	fmt.Println("go-wincall demo :3")
+	ssn, addr := resolve.GetSyscallAndAddress(wincall.GetHash("NtProtectVirtualMemory"))
+	fmt.Printf("ntprotect syscall resolved to 0x00%x, ssn %d\n", addr, ssn)
+	// Pin the main goroutine to a single OS thread so all g0 calls
+	// in this process run on the same thread for consistent TID.
+	runtime.LockOSThread()
+	wincall.UnhookNtdll()
+	if wincall.IsDebuggerPresent() {
+		os.Exit(1)
+	}
+	// Verify g0 execution using a tiny NOSPLIT TEB reader to avoid stack growth
+	tidBefore := wincall.CurrentThreadIDFast()
+	var tidOnG0 uint32
+	wincall.RunOnG0(func() { tidOnG0 = wincall.CurrentThreadIDFast() })
+	fmt.Printf("current thread id: %d\n", tidBefore)
+	fmt.Printf("current thread id (on g0): %d (same=%v)\n", tidOnG0, tidOnG0 == tidBefore)
+	showMenu()
 }
 
 func showMenu() {
@@ -85,21 +89,24 @@ func customResolver(scanner *bufio.Scanner) {
 
 		funcInput := strings.TrimSpace(scanner.Text())
 
-        fmt.Printf("\nloading %s...\n", dllName)
-        wincall.LoadLibraryW(dllName)
-        // Display current thread identity using g0-safe TEB read and confirm via CallG0
-        tidCur := wincall.CurrentThreadIDFast()
-        k32 := wincall.LoadLibraryW("kernel32.dll")
-        getTid := wincall.GetFunctionAddress(k32, wincall.GetHash("GetCurrentThreadId"))
-        var tidG0 uint32
-        if getTid != 0 {
-            t, _ := wincall.CallG0(getTid)
-            tidG0 = uint32(t)
-        }
-        fmt.Printf("g0/current thread id: %d\n", tidCur)
-        if getTid != 0 {
-            fmt.Printf("g0 CallG0(GetCurrentThreadId): %d (same=%v)\n", tidG0, tidG0 == tidCur)
-        }
+		fmt.Printf("\nloading %s...\n", dllName)
+		wincall.LoadLibraryW(dllName)
+		// Display current thread identity using g0-safe TEB read and confirm via CallG0
+		tidCur := wincall.CurrentThreadIDFast()
+		k32 := wincall.LoadLibraryW("kernel32.dll")
+		getTid := wincall.GetFunctionAddress(k32, wincall.GetHash("GetCurrentThreadId"))
+		var tidG0 uint32
+		if getTid != 0 {
+			r1, _, err := wincall.CallG0(getTid)
+			if err != nil {
+				fmt.Printf("failed to get tid with %v", err)
+			}
+			tidG0 = uint32(r1)
+		}
+		fmt.Printf("g0/current thread id: %d\n", tidCur)
+		if getTid != 0 {
+			fmt.Printf("g0 CallG0(GetCurrentThreadId): %d (same=%v)\n", tidG0, tidG0 == tidCur)
+		}
 
 		dllHash := wincall.GetHash(dllName)
 		moduleBase := wincall.GetModuleBase(dllHash)
@@ -158,18 +165,18 @@ func runExamples() {
 
 // high level api usage :3
 func exampleHighLevel() {
-	commandLinePtr, _ := wincall.Call("kernel32", "GetCommandLineW")
+	commandLinePtr, _, _ := wincall.Call("kernel32", "GetCommandLineW")
 	commandLine := wincall.ReadUTF16String(commandLinePtr)
 	fmt.Printf("command line: %s\n", commandLine)
 
-	color, _ := wincall.Call("user32", "GetSysColor", 5)
+	color, _, _ := wincall.Call("user32", "GetSysColor", 5)
 	r := wincall.ExtractByte(color, 0)
 	g := wincall.ExtractByte(color, 1)
 	b := wincall.ExtractByte(color, 2)
 	fmt.Printf("window color: rgb(%d, %d, %d) = #%02X%02X%02X\n", r, g, b, r, g, b)
 
 	var buffer [260]byte
-	length, _ := wincall.Call("kernel32", "GetWindowsDirectoryA", &buffer[0], 260)
+	length, _, _ := wincall.Call("kernel32", "GetWindowsDirectoryA", &buffer[0], 260)
 	if length > 0 {
 		winDir := wincall.ReadANSIString(uintptr(unsafe.Pointer(&buffer[0])))
 		fmt.Printf("windows directory: %s\n", winDir)
@@ -178,10 +185,10 @@ func exampleHighLevel() {
 	title, _ := wincall.UTF16ptr("high level api")
 	message, _ := wincall.UTF16ptr("twitter.com/owengsmt")
 
-	wincall.Call("user32.dll", "MessageBoxW",// hwnd
+	wincall.Call("user32.dll", "MessageBoxW", // hwnd
 
-	// MB_OK
-	0,
+		// MB_OK
+		0,
 		message,
 		title,
 		0,
@@ -202,13 +209,13 @@ func exampleManual() {
 	title, _ := wincall.UTF16ptr("manual")
 	message, _ := wincall.UTF16ptr("twitter.com/owengsmt")
 
-    wincall.CallG0(
-        funcAddr,
-        0, // hwnd
-        message,
-        title,
-        0, // MB_OK
-    )
+	wincall.CallG0(
+		funcAddr,
+		0, // hwnd
+		message,
+		title,
+		0, // MB_OK
+	)
 	runtime.KeepAlive(title)
 	runtime.KeepAlive(message)
 }

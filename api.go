@@ -1,31 +1,26 @@
 package wincall
 
 import (
-    "fmt"
-    "unicode/utf16"
-    "unsafe"
+	"fmt"
+	"unicode/utf16"
+	"unsafe"
 
-    "github.com/carved4/go-wincall/pkg/errors"
-    "github.com/carved4/go-wincall/pkg/obf"
-    "github.com/carved4/go-wincall/pkg/resolve"
-    "github.com/carved4/go-wincall/pkg/wincall"
-    pkgsys "github.com/carved4/go-wincall/pkg/syscall"
+	"github.com/carved4/go-wincall/pkg/errors"
+	"github.com/carved4/go-wincall/pkg/obf"
+	"github.com/carved4/go-wincall/pkg/resolve"
+	pkgsys "github.com/carved4/go-wincall/pkg/syscall"
+	"github.com/carved4/go-wincall/pkg/wincall"
 )
 
 func init() {
 	// Set up the LoadLibraryW callback to avoid circular dependencies
-	resolve.SetLoadLibraryCallback(wincall.LoadLibraryW)
+	resolve.SetLoadLibraryCallback(wincall.LdrLoadDLL)
 }
 
 // CallG0 wraps calling a function pointer on the Go system stack (g0).
 // Prefer this over CallWorker if you don't need the persistent native thread.
-func CallG0(funcAddr uintptr, args ...interface{}) (uintptr, error) {
-    return wincall.CallG0(funcAddr, args...)
-}
-
-// GetCurrentThreadId returns the native thread id of the current thread.
-func GetCurrentThreadId() (uint32, error) {
-    return wincall.GetCurrentThreadId()
+func CallG0(funcAddr uintptr, args ...any) (uintptr, uintptr, error) {
+	return wincall.CallG0(funcAddr, args...)
 }
 
 // CurrentThreadIDFast reads TID from TEB (no syscalls). Safe on g0.
@@ -38,10 +33,9 @@ func LoadLibraryW(name string) uintptr {
 	return wincall.LoadLibraryW(name)
 }
 
-func GetProcAddress(moduleHandle uintptr, procName *byte) uintptr {
-	return wincall.GetProcAddress(moduleHandle, unsafe.Pointer(procName))
+func LoadLibraryLdr(name string) uintptr {
+	return wincall.LdrLoadDLL(name)
 }
-
 func UTF16PtrFromString(s string) (*uint16, error) {
 	return wincall.UTF16PtrFromString(s)
 }
@@ -62,95 +56,77 @@ func IsDebuggerPresent() bool {
 	return wincall.IsDebuggerPresent()
 }
 
-func Call(dllName, funcName interface{}, args ...interface{}) (uintptr, error) {
+func Call(dllName, funcName interface{}, args ...interface{}) (uintptr, uintptr, error) {
 	// Convert parameters to strings (handles both string and obfuscated formats)
 	var dllNameStr, funcNameStr string
-	
+
 	switch v := dllName.(type) {
 	case string:
 		dllNameStr = v
 	default:
 		dllNameStr = v.(string)
 	}
-	
+
 	switch v := funcName.(type) {
 	case string:
 		funcNameStr = v
 	default:
 		funcNameStr = v.(string)
 	}
-	
+
 	dllHash := GetHash(dllNameStr)
 	moduleBase := GetModuleBase(dllHash)
 	if moduleBase == 0 {
 		moduleBase = wincall.LoadLibraryW(dllNameStr)
 		if moduleBase == 0 {
-			return 0, errors.New(errors.Err1)
+			return 0, 0, errors.New(errors.Err1)
 		}
 	}
 	funcHash := GetHash(funcNameStr)
 	funcAddr := GetFunctionAddress(moduleBase, funcHash)
 	if funcAddr == 0 {
-		return 0, errors.New(errors.Err2)
+		return 0, 0, errors.New(errors.Err2)
 	}
 
-    // Execute on g0 instead of the persistent native worker thread.
-    result, err := wincall.CallG0(funcAddr, args...)
+	// Execute on g0 instead of the persistent native worker thread.
+	r1, r2, err := wincall.CallG0(funcAddr, args...)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	return result, nil
+	return r1, r2, nil
 }
 
 func UTF16ptr(s string) (*uint16, error) {
-    ptr, err := wincall.UTF16PtrFromString(s)
-    return ptr, err
+	ptr, err := wincall.UTF16PtrFromString(s)
+	return ptr, err
 }
 
 // Callback configuration and pointer exposure for foreign callers
 func SetCallbackN(fn uintptr, args ...uintptr) error { return wincall.SetCallbackN(fn, args...) }
-func CallbackPtr() uintptr { return wincall.CallbackPtr() }
+func CallbackPtr() uintptr                           { return wincall.CallbackPtr() }
 
 // Expose syscall helpers for convenience in callers
 func Syscall(syscallNum uint16, args ...uintptr) (uintptr, error) {
-    return pkgsys.Syscall(syscallNum, args...)
+	return pkgsys.Syscall(syscallNum, args...)
 }
 func IndirectSyscall(syscallNum uint16, syscallAddr uintptr, args ...uintptr) (uintptr, error) {
-    return pkgsys.IndirectSyscall(syscallNum, syscallAddr, args...)
+	return pkgsys.IndirectSyscall(syscallNum, syscallAddr, args...)
 }
-
 
 func SyscallDirectCallbackPtr() uintptr { return wincall.SyscallDirectEntryPC }
-
-// NT* syscall wrappers
-func NtAllocateVirtualMemory(processHandle uintptr, baseAddress *uintptr, zeroBits uintptr, regionSize *uintptr, allocationType uintptr, protect uintptr) (uint32, error) {
-	return wincall.NtAllocateVirtualMemory(processHandle, baseAddress, zeroBits, regionSize, allocationType, protect)
-}
-
-func NtWriteVirtualMemory(processHandle uintptr, baseAddress uintptr, buffer uintptr, numberOfBytesToWrite uintptr, numberOfBytesWritten *uintptr) (uint32, error) {
-	return wincall.NtWriteVirtualMemory(processHandle, baseAddress, buffer, numberOfBytesToWrite, numberOfBytesWritten)
-}
-
-func NtReadVirtualMemory(processHandle uintptr, baseAddress uintptr, buffer uintptr, numberOfBytesToRead uintptr, numberOfBytesRead *uintptr) (uint32, error) {
-	return wincall.NtReadVirtualMemory(processHandle, baseAddress, buffer, numberOfBytesToRead, numberOfBytesRead)
-}
-
-func NtProtectVirtualMemory(processHandle uintptr, baseAddress *uintptr, regionSize *uintptr, newProtect uintptr, oldProtect *uintptr) (uint32, error) {
-	return wincall.NtProtectVirtualMemory(processHandle, baseAddress, regionSize, newProtect, oldProtect)
-}
 
 // Removed unused Nt* wrappers for events/thread creation/waiting.
 
 // UnhookNtdll restores clean ntdll.dll from disk to remove any hooks
 func UnhookNtdll() error {
-    return resolve.UnhookNtdll()
+	return resolve.UnhookNtdll()
 }
 
 // ClearCaches clears resolve-level and hash caches
 func ClearCaches() {
-    resolve.ClearResolveCaches()
-    // optional: clear hash cache too
-    obf.ClearHashCache()
+	resolve.ClearResolveCaches()
+	// optional: clear hash cache too
+	obf.ClearHashCache()
 }
 
 // GetSyscallWithAntiHook attempts to resolve syscall with anti-hooking measures

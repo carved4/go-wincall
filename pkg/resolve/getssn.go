@@ -1,21 +1,21 @@
 package resolve
 
 import (
+	"sort"
+	"sync"
 	"time"
 	"unsafe"
-	"sort"
+
 	"github.com/carved4/go-wincall/pkg/errors"
 	"github.com/carved4/go-wincall/pkg/obf"
 )
 
-func GetSyscallNumber(functionHash uint32) uint16 {
-	syscallCacheMutex.RLock()
-	if num, ok := syscallCache[functionHash]; ok {
-		syscallCacheMutex.RUnlock()
-		return num
-	}
-	syscallCacheMutex.RUnlock()
+var (
+	sortedExports     []Export
+	sortedExportsOnce sync.Once
+)
 
+func GetSyscallNumber(functionHash uint32) uint16 {
 	ntdllHash := obf.GetHash("ntdll.dll")
 
 	var ntdllBase uintptr
@@ -63,9 +63,7 @@ func GetSyscallNumber(functionHash uint32) uint16 {
 	syscallNumber := extractSyscallNumberWithValidation(funcAddr, functionHash)
 
 	if syscallNumber != 0 {
-		syscallCacheMutex.Lock()
-		syscallCache[functionHash] = syscallNumber
-		syscallCacheMutex.Unlock()
+		return 0
 	}
 
 	return syscallNumber
@@ -478,10 +476,8 @@ func GuessSyscallNumber(targetHash uint32) uint16 {
 		return 0
 	}
 
-	ntdllBase := GetModuleBase(obf.GetHash("ntdll.dll",
+	ntdllBase := GetModuleBase(obf.GetHash("ntdll.dll")) // Find the target function
 
-	// Find the target function
-	))
 	if ntdllBase == 0 {
 		return 0
 	}
