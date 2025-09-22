@@ -586,6 +586,19 @@ func getForwarderString(funcAddr uintptr) string {
 }
 
 func resolveForwardedExport(forwarderString string) uintptr {
+	return resolveForwardedExportWithStack(forwarderString, make(map[string]bool))
+}
+
+func resolveForwardedExportWithStack(forwarderString string, resolutionStack map[string]bool) uintptr {
+	// Check for circular forwarding to prevent infinite recursion
+	if resolutionStack[forwarderString] {
+		return 0 // Circular reference detected
+	}
+	
+	// Add current forwarder to the stack
+	resolutionStack[forwarderString] = true
+	defer delete(resolutionStack, forwarderString)
+	
 	parts := strings.Split(forwarderString, ".")
 	if len(parts) != 2 {
 		return 0
@@ -600,13 +613,27 @@ func resolveForwardedExport(forwarderString string) uintptr {
 
 	// Handle API Set DLLs - resolve them to their actual implementation
 	actualDLL := resolveApiSet(targetDLL)
-
-	dllHash := obf.GetHash(actualDLL)
-	moduleBase := GetModuleBase(dllHash)
-
-	if moduleBase == 0 && loadLibraryCallback != nil {
-		loadLibraryCallback(actualDLL)
+	
+	// Avoid circular resolution: if the API set resolves back to the same DLL
+	// that we're already resolving from, try loading the original API set DLL
+	var dllHash uint32
+	var moduleBase uintptr
+	
+	if strings.EqualFold(actualDLL, targetDLL) {
+		// API set couldn't be resolved, try loading it directly
+		dllHash = obf.GetHash(targetDLL)
 		moduleBase = GetModuleBase(dllHash)
+		if moduleBase == 0 && loadLibraryCallback != nil {
+			loadLibraryCallback(targetDLL)
+			moduleBase = GetModuleBase(dllHash)
+		}
+	} else {
+		dllHash = obf.GetHash(actualDLL)
+		moduleBase = GetModuleBase(dllHash)
+		if moduleBase == 0 && loadLibraryCallback != nil {
+			loadLibraryCallback(actualDLL)
+			moduleBase = GetModuleBase(dllHash)
+		}
 	}
 
 	if moduleBase == 0 {
@@ -619,9 +646,68 @@ func resolveForwardedExport(forwarderString string) uintptr {
 		if err != nil {
 			return 0
 		}
-		return GetFunctionAddress(moduleBase, uint32(ordinal))
+		return getFunctionAddressWithForwardStack(moduleBase, uint32(ordinal), resolutionStack)
 	} else {
 		funcHash := obf.GetHash(targetFunction)
-		return GetFunctionAddress(moduleBase, funcHash)
+		return getFunctionAddressWithForwardStack(moduleBase, funcHash, resolutionStack)
 	}
+}
+
+// getFunctionAddressWithForwardStack resolves function addresses while tracking forwarded export chains
+// to prevent infinite recursion during forwarded export resolution
+func getFunctionAddressWithForwardStack(moduleBase uintptr, functionHash uint32, resolutionStack map[string]bool) uintptr {
+	if moduleBase == 0 {
+		return 0
+	}
+
+	dosHeader := (*[64]byte)(unsafe.Pointer(moduleBase))
+	if dosHeader[0] != 'M' || dosHeader[1] != 'Z' {
+		return 0
+	}
+
+	peOffset := *(*uint32)(unsafe.Pointer(moduleBase + 60))
+	if peOffset >= 1024 {
+		return 0
+	}
+
+	peHeader := (*[1024]byte)(unsafe.Pointer(moduleBase + uintptr(peOffset)))
+	if peHeader[0] != 'P' || peHeader[1] != 'E' {
+		return 0
+	}
+
+	// Resolve using cached export index for O(1) lookups
+	idx := getExportIndex(moduleBase)
+	if idx == nil {
+		return 0
+	}
+
+	var funcAddr uintptr
+	var foundExport *Export
+
+	if functionHash < 65536 {
+		if exp, ok := idx.ord[functionHash]; ok {
+			e := exp
+			foundExport = &e
+		}
+	}
+
+	if foundExport == nil {
+		if exp, ok := idx.name[functionHash]; ok {
+			e := exp
+			foundExport = &e
+		}
+	}
+
+	if foundExport != nil {
+		funcAddr = moduleBase + uintptr(foundExport.VirtualAddress)
+
+		if isForwardedExport(moduleBase, funcAddr) {
+			forwarderString := getForwarderString(funcAddr)
+			if resolvedAddr := resolveForwardedExportWithStack(forwarderString, resolutionStack); resolvedAddr != 0 {
+				funcAddr = resolvedAddr
+			}
+		}
+	}
+
+	return funcAddr
 }
