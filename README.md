@@ -27,8 +27,15 @@ the framework avoids high-level windows apis for its setup and execution. module
 
 ### final binary preparation
 
-after building your binary, run the included strip script to remove github.com import strings:
+before building your binary, run the included hash_replacer tool to remove string literals from GetHash() calls
+```bash
+cd tools
+// change hashing algorithm in obf.go to anything you please, or keep it the same
+// update hash_replacer.go hash func to match
+go run hash_replacer.go
 
+```
+after building your binary, run the included strip script to remove github.com import strings:
 ```bash
 ./strip.sh your_binary.exe
 ```
@@ -93,7 +100,7 @@ color, _ := wincall.Call("user32", "GetSysColor", 5)
 
 // extract RGB components from packed color value
 r := wincall.ExtractByte(color, 0)  // red component (0-255)
-g := wincall.ExtractByte(color, 1)  // green component (0-255)  
+g := wincall.ExtractByte(color, 1)  // green component (0-255)
 b := wincall.ExtractByte(color, 2)  // blue component (0-255)
 
 fmt.Printf("window color: rgb(%d, %d, %d) = #%02X%02X%02X\n", r, g, b, r, g, b)
@@ -115,7 +122,7 @@ fmt.Printf("command line: %s\n", commandLine)
 packedValue := uintptr(0x12345678)
 
 valueType := wincall.ExtractBits(packedValue, 0, 4)   // bits 0-3
-subtype := wincall.ExtractBits(packedValue, 4, 4)     // bits 4-7  
+subtype := wincall.ExtractBits(packedValue, 4, 4)     // bits 4-7
 id := wincall.ExtractBits(packedValue, 8, 8)          // bits 8-15
 data := wincall.ExtractBits(packedValue, 16, 16)      // bits 16-31
 ```
@@ -141,14 +148,14 @@ data := wincall.ExtractBits(packedValue, 16, 16)      // bits 16-31
 
 #### return value decoding utilities
 - `ExtractByte(value uintptr, byteIndex int) uint8` - extract specific byte from return value
-- `ExtractWord(value uintptr, wordIndex int) uint16` - extract 16-bit word from return value  
+- `ExtractWord(value uintptr, wordIndex int) uint16` - extract 16-bit word from return value
 - `ExtractBits(value uintptr, startBit, numBits int) uint32` - extract arbitrary bit range
 - `CombineWords(low, high uint16) uint32` - combine two 16-bit words into 32-bit value
 - `CombineBytes(b0, b1, b2, b3 uint8) uint32` - combine four bytes into 32-bit value
 - `CombineDwords(low, high uint32) uint64` - combine two 32-bit values into 64-bit
 - `SplitDwords(value uint64) (low, high uint32)` - split 64-bit value into two 32-bit parts
 - `ReadUTF16String(ptr uintptr) string` - read null-terminated utf-16 string from pointer
-- `ReadANSIString(ptr uintptr) string` - read null-terminated ansi string from pointer  
+- `ReadANSIString(ptr uintptr) string` - read null-terminated ansi string from pointer
 - `ReadLARGE_INTEGER(ptr uintptr) int64` - read 64-bit value from large_integer pointer
 - `ReadBytes(ptr uintptr, length int) []byte` - read byte array from memory pointer
 
@@ -158,5 +165,5 @@ data := wincall.ExtractBits(packedValue, 16, 16)      // bits 16-31
 - `NtReadVirtualMemory(processHandle uintptr, baseAddress uintptr, buffer uintptr, numberOfBytesToRead uintptr, numberOfBytesRead *uintptr) (uint32, error)` -reads memory from a target process.
 - `NtProtectVirtualMemory(processHandle uintptr, baseAddress *uintptr, regionSize *uintptr, newProtect uintptr, oldProtect *uintptr) (uint32, error)` - changes protection on a memory region.
 
-> **note**  
+> **note**
 > all calls now execute on the caller's os thread system stack (g0). there is no persistent worker thread. if you need strict thread affinity across multiple calls, use `runtime.LockOSThread()` in your code around the sequence.
