@@ -15,8 +15,8 @@ import (
 
 func main() {
 	fmt.Println("go-wincall demo :3")
-	ssn, addr := resolve.GetSyscallAndAddress(wincall.GetHash("NtProtectVirtualMemory"))
-	fmt.Printf("ntprotect syscall resolved to 0x00%x, ssn %d\n", addr, ssn)
+	ntProtect := resolve.GetSyscall(wincall.GetHash("NtProtectVirtualMemory"))
+	fmt.Printf("ntprotect syscall resolved to 0x00%x, ssn %d\n", ntProtect.Address, ntProtect.SSN)
 	// Pin the main goroutine to a single OS thread so all g0 calls
 	// in this process run on the same thread for consistent TID.
 	runtime.LockOSThread()

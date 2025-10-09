@@ -1,7 +1,6 @@
 package wincall
 
 import (
-	"fmt"
 	"unicode/utf16"
 	"unsafe"
 
@@ -35,9 +34,6 @@ func LoadLibraryW(name string) uintptr {
 
 func LoadLibraryLdr(name string) uintptr {
 	return wincall.LdrLoadDLL(name)
-}
-func UTF16PtrFromString(s string) (*uint16, error) {
-	return wincall.UTF16PtrFromString(s)
 }
 
 func GetModuleBase(moduleHash uint32) uintptr {
@@ -106,10 +102,10 @@ func SetCallbackN(fn uintptr, args ...uintptr) error { return wincall.SetCallbac
 func CallbackPtr() uintptr                           { return wincall.CallbackPtr() }
 
 // Expose syscall helpers for convenience in callers
-func Syscall(syscallNum uint16, args ...uintptr) (uintptr, error) {
+func Syscall(syscallNum uint32, args ...uintptr) (uintptr, error) {
 	return pkgsys.Syscall(syscallNum, args...)
 }
-func IndirectSyscall(syscallNum uint16, syscallAddr uintptr, args ...uintptr) (uintptr, error) {
+func IndirectSyscall(syscallNum uint32, syscallAddr uintptr, args ...uintptr) (uintptr, error) {
 	return pkgsys.IndirectSyscall(syscallNum, syscallAddr, args...)
 }
 
@@ -131,13 +127,8 @@ func ClearCaches() {
 
 // GetSyscallWithAntiHook attempts to resolve syscall with anti-hooking measures
 // Returns syscall number, trampoline address, and error
-func GetSyscallWithAntiHook(functionName string) (uint16, uintptr, error) {
-	functionHash := GetHash(functionName)
-	syscallNum, trampolineAddr := resolve.GetSyscallAndAddress(functionHash)
-	if syscallNum == 0 {
-		return 0, 0, fmt.Errorf("failed to resolve syscall for %s", functionName)
-	}
-	return syscallNum, trampolineAddr, nil
+func GetSyscall(hash uint32) resolve.Syscall {
+	return resolve.GetSyscall(hash)
 }
 
 // Generic bit manipulation helpers for unpacking most Windows API return values

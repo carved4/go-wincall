@@ -54,12 +54,14 @@ func UnhookNtdll() error {
 	var oldProtect uintptr
 
 	ntProtectHash := obf.GetHash("NtProtectVirtualMemory")
-	syscallNum, trampolineAddr := GetSyscallAndAddress(ntProtectHash)
-	if syscallNum == 0 {
+	syscallNum := GetSyscall(ntProtectHash)
+	if syscallNum.Address == 0 {
 		return errors.New(errors.Err1)
 	}
 
-	result, err := syscall.IndirectSyscall(syscallNum, trampolineAddr,
+	trampoline := syscall.GetTrampoline(syscallNum.Address)
+
+	result, err := syscall.IndirectSyscall(syscallNum.SSN, trampoline,
 		currentProcess,
 		uintptr(unsafe.Pointer(&targetAddr)),
 		uintptr(unsafe.Pointer(&textSize)),
@@ -88,7 +90,7 @@ func UnhookNtdll() error {
 	runtime.KeepAlive(cleanTextData)
 
 	var dummy uintptr
-	result2, err := syscall.IndirectSyscall(syscallNum, trampolineAddr,
+	result2, err := syscall.IndirectSyscall(syscallNum.SSN, trampoline,
 		currentProcess,
 		uintptr(unsafe.Pointer(&targetAddr)),
 		uintptr(unsafe.Pointer(&textSize)),

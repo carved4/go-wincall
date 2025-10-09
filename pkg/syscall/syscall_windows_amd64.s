@@ -68,8 +68,8 @@ callz:
 	MOVL	AX, errcode+32(FP)
 	RET
 // taken from https://github.com/f1zm0/acheron/blob/main/internal/resolver/rvasort/resolver_amd64.s
-// func getTrampoline(stubAddr uintptr) uintptr
-TEXT ·getTrampoline(SB),NOSPLIT,$0-8
+// func GetTrampoline(stubAddr uintptr) uintptr
+TEXT ·GetTrampoline(SB),NOSPLIT,$0-8
     MOVQ stubAddr+0(FP), AX
     MOVQ AX, R10
 
@@ -111,10 +111,10 @@ not_found:
     MOVQ AX, ret+8(FP)
     RET
 // taken from https://github.com/f1zm0/acheron/blob/main/syscall_amd64.s
-// func do_syscall_indirect(ssn uint16, trampoline uintptr, argh ...uintptr) uint32
+// func do_syscall_indirect(ssn uint32, trampoline uintptr, argh ...uintptr) uint32
 TEXT ·do_syscall_indirect(SB),NOSPLIT,$0-40
     XORQ    AX, AX
-    MOVW    ssn+0(FP), AX
+    MOVL    ssn+0(FP), AX
 	
     XORQ    R11, R11
     MOVQ    trampoline+8(FP), R11
