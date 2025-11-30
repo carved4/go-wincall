@@ -115,29 +115,29 @@ not_found:
 TEXT ·do_syscall_indirect(SB),NOSPLIT,$0-40
     XORQ    AX, AX
     MOVL    ssn+0(FP), AX
-	
+
     XORQ    R11, R11
     MOVQ    trampoline+8(FP), R11
-	
+
     PUSHQ   CX
-	
+
     //put variadic pointer into SI
     MOVQ    argh_base+16(FP),SI
 
     //put variadic size into CX
     MOVQ    argh_len+24(FP),CX
-	
+
     // SetLastError(0).
     MOVQ    0x30(GS), DI
     MOVL    $0, 0x68(DI)
 
     // room for args
-    SUBQ    $(maxargs*8), SP	
+    SUBQ    $(maxargs*8), SP
 
     //no parameters, special case
     CMPL    CX, $0
     JLE     jumpcall
-	
+
     // Fast version, do not store args on the stack.
     CMPL    CX, $4
     JLE	    loadregs
@@ -147,14 +147,14 @@ TEXT ·do_syscall_indirect(SB),NOSPLIT,$0-40
     JLE	    2(PC)
 
     // not enough room -> crash
-    INT	    $3			
+    INT	    $3
 
     // Copy args to the stack.
     MOVQ    SP, DI
     CLD
     REP; MOVSQ
     MOVQ    SP, SI
-	
+
 loadregs:
 
     // Load first 4 args into correspondent registers.
@@ -162,15 +162,15 @@ loadregs:
     MOVQ	8(SI), DX
     MOVQ	16(SI), R8
     MOVQ	24(SI), R9
-	
+
     // Floating point arguments are passed in the XMM registers
-    // Set them here in case any of the arguments are floating point values. 
+    // Set them here in case any of the arguments are floating point values.
     // For details see: https://msdn.microsoft.com/en-us/library/zthk2dkh.aspx
     MOVQ	CX, X0
     MOVQ	DX, X1
     MOVQ	R8, X2
     MOVQ	R9, X3
-	
+
 jumpcall:
     MOVQ    CX, R10
 
@@ -183,4 +183,3 @@ jumpcall:
     POPQ	CX
     MOVL	AX, errcode+40(FP)
     RET
-

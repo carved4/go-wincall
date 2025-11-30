@@ -9,7 +9,6 @@ const (
 	Err2 = 2
 )
 
-// WinCallError represents an error with an error code
 type WinCallError struct {
 	Code uint32
 }

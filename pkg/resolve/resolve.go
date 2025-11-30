@@ -11,20 +11,17 @@ import (
 	"github.com/carved4/go-wincall/pkg/utils"
 )
 
-// Export represents a single exported symbol from a PE image
 type Export struct {
 	Name           string
 	VirtualAddress uint32
 	Ordinal        uint32
 }
 
-// getExportDirectoryRange reads the Export Data Directory (RVA, Size)
 func getExportDirectoryRange(moduleBase uintptr) (uint32, uint32) {
 	if moduleBase == 0 {
 		return 0, 0
 	}
 
-	// Verify DOS header
 	dos := (*[64]byte)(unsafe.Pointer(moduleBase))
 	if dos[0] != 'M' || dos[1] != 'Z' {
 		return 0, 0
@@ -36,12 +33,10 @@ func getExportDirectoryRange(moduleBase uintptr) (uint32, uint32) {
 		return 0, 0
 	}
 
-	// Optional header starts after 4-byte Signature and 20-byte COFF header
 	optStart := moduleBase + uintptr(peOff) + 24
 	magic := *(*uint16)(unsafe.Pointer(optStart + 0))
 
 	var ddOff uintptr
-	// DataDirectory starts at offset 96 for PE32, 112 for PE32+
 	if magic == 0x10b { // PE32
 		ddOff = 96
 	} else if magic == 0x20b { // PE32+
@@ -50,14 +45,12 @@ func getExportDirectoryRange(moduleBase uintptr) (uint32, uint32) {
 		return 0, 0
 	}
 
-	// IMAGE_DIRECTORY_ENTRY_EXPORT = 0
 	dd := optStart + ddOff
 	exportRVA := *(*uint32)(unsafe.Pointer(dd + 0))
 	exportSize := *(*uint32)(unsafe.Pointer(dd + 4))
 	return exportRVA, exportSize
 }
 
-// parseExports enumerates exports directly from an in-memory module image
 func parseExports(moduleBase uintptr) []Export {
 	exportRVA, _ := getExportDirectoryRange(moduleBase)
 	if exportRVA == 0 {
@@ -65,14 +58,6 @@ func parseExports(moduleBase uintptr) []Export {
 	}
 
 	exportDir := moduleBase + uintptr(exportRVA)
-
-	// Offsets within IMAGE_EXPORT_DIRECTORY
-	// 16: Base (DWORD)
-	// 20: NumberOfFunctions (DWORD)
-	// 24: NumberOfNames (DWORD)
-	// 28: AddressOfFunctions (DWORD)
-	// 32: AddressOfNames (DWORD)
-	// 36: AddressOfNameOrdinals (DWORD)
 	base := *(*uint32)(unsafe.Pointer(exportDir + 16))
 	numFuncs := *(*uint32)(unsafe.Pointer(exportDir + 20))
 	numNames := *(*uint32)(unsafe.Pointer(exportDir + 24))
@@ -83,18 +68,13 @@ func parseExports(moduleBase uintptr) []Export {
 	addrFuncs := moduleBase + uintptr(addrFuncsRVA)
 	addrNames := moduleBase + uintptr(addrNamesRVA)
 	addrOrds := moduleBase + uintptr(addrOrdsRVA)
-
-	// Build a map of function index -> name
 	nameByIndex := make(map[uint16]string)
 	for i := uint32(0); i < numNames; i++ {
 		nameRVA := *(*uint32)(unsafe.Pointer(addrNames + uintptr(i*4)))
 		namePtr := moduleBase + uintptr(nameRVA)
-		// Ordinal index is a WORD into AddressOfFunctions table
 		ordIndex := *(*uint16)(unsafe.Pointer(addrOrds + uintptr(i*2)))
 		nameByIndex[ordIndex] = readCString(namePtr)
 	}
-
-	// Collect all exports (including ordinal-only)
 	exports := make([]Export, 0, numFuncs)
 	for i := uint32(0); i < numFuncs; i++ {
 		funcRVA := *(*uint32)(unsafe.Pointer(addrFuncs + uintptr(i*4)))
@@ -115,7 +95,6 @@ func parseExports(moduleBase uintptr) []Export {
 }
 
 func readCString(ptr uintptr) string {
-	// Read ASCII bytes until NUL or a sane limit
 	var buf [512]byte
 	for i := 0; i < len(buf); i++ {
 		b := *(*byte)(unsafe.Pointer(ptr + uintptr(i)))
@@ -127,7 +106,6 @@ func readCString(ptr uintptr) string {
 	return string(buf[:])
 }
 
-// API Set structures for dynamic resolution
 type API_SET_NAMESPACE struct {
 	Version     uint32
 	Size        uint32
@@ -211,22 +189,18 @@ func GetCurrentProcessPEB() *utils.PEB {
 }
 
 func GetModuleBase(moduleHash uint32) uintptr {
-	// Fast path: check individual module cache first
 	moduleCacheMutex.RLock()
 	if moduleBase, ok := moduleCache[moduleHash]; ok {
 		moduleCacheMutex.RUnlock()
 		return moduleBase
 	}
 	moduleCacheMutex.RUnlock()
-
-	// Check module list cache (avoids PEB walk if recent)
 	now := time.Now().UnixNano()
 	moduleListMutex.RLock()
 	if moduleListCacheTime != 0 && (now-moduleListCacheTime) < 5e9 { // 5 second cache
 		for _, mod := range moduleListCache {
 			if mod.hash == moduleHash {
 				moduleListMutex.RUnlock()
-				// Also cache in individual cache for faster future access
 				moduleCacheMutex.Lock()
 				moduleCache[moduleHash] = mod.base
 				moduleCacheMutex.Unlock()
@@ -235,8 +209,6 @@ func GetModuleBase(moduleHash uint32) uintptr {
 		}
 	}
 	moduleListMutex.RUnlock()
-
-	// Slow path: refresh module list cache
 	return refreshModuleCache(moduleHash)
 }
 
@@ -270,13 +242,11 @@ func refreshModuleCache(targetHash uint32) uintptr {
 		currentEntry = currentEntry.Flink
 	}
 
-	// Update cache
 	moduleListMutex.Lock()
 	moduleListCache = newModuleList
 	moduleListCacheTime = time.Now().UnixNano()
 	moduleListMutex.Unlock()
 
-	// Cache individual result
 	if targetBase != 0 {
 		moduleCacheMutex.Lock()
 		moduleCache[targetHash] = targetBase
@@ -287,7 +257,6 @@ func refreshModuleCache(targetHash uint32) uintptr {
 }
 
 func GetFunctionAddress(moduleBase uintptr, functionHash uint32) uintptr {
-	// Use struct key to avoid string allocation
 	cacheKey := funcCacheKey{moduleBase: moduleBase, functionHash: functionHash}
 	functionCacheMutex.RLock()
 	if funcAddr, ok := functionCache[cacheKey]; ok {
@@ -314,8 +283,6 @@ func GetFunctionAddress(moduleBase uintptr, functionHash uint32) uintptr {
 	if peHeader[0] != 'P' || peHeader[1] != 'E' {
 		return 0
 	}
-
-	// Resolve using cached export index for O(1) lookups
 	idx := getExportIndex(moduleBase)
 	if idx == nil {
 		return 0
@@ -359,7 +326,6 @@ func GetFunctionAddress(moduleBase uintptr, functionHash uint32) uintptr {
 }
 
 func resolveApiSet(dllName string) string {
-	// If it's not an API Set DLL, return as-is
 	if !strings.HasPrefix(strings.ToLower(dllName), "api-ms-") {
 		return dllName
 	}
@@ -373,20 +339,15 @@ func resolveApiSet(dllName string) string {
 	if apiSetMap == nil || apiSetMap.Count == 0 {
 		return dllName
 	}
-
-	// Convert DLL name to UTF-16 for comparison (removing .dll extension)
 	searchName := strings.ToLower(dllName)
 	if strings.HasSuffix(searchName, ".dll") {
 		searchName = searchName[:len(searchName)-4]
 	}
 
-	// Get the first entry
 	entryPtr := uintptr(unsafe.Pointer(apiSetMap)) + uintptr(apiSetMap.EntryOffset)
 
 	for i := uint32(0); i < apiSetMap.Count; i++ {
 		entry := (*API_SET_NAMESPACE_ENTRY)(unsafe.Pointer(entryPtr + uintptr(i)*unsafe.Sizeof(API_SET_NAMESPACE_ENTRY{})))
-
-		// Read the API Set name
 		namePtr := uintptr(unsafe.Pointer(apiSetMap)) + uintptr(entry.NameOffset)
 		nameBytes := (*[256]uint16)(unsafe.Pointer(namePtr))
 		nameLen := entry.NameLength / 2 // Convert from bytes to UTF-16 chars
@@ -394,17 +355,12 @@ func resolveApiSet(dllName string) string {
 		if nameLen > 256 {
 			continue
 		}
-
-		// Convert to string
 		nameSlice := make([]uint16, nameLen)
 		for j := uint32(0); j < nameLen; j++ {
 			nameSlice[j] = nameBytes[j]
 		}
 		apiSetName := strings.ToLower(utils.UTF16ToString(&nameSlice[0]))
-
-		// Check if this matches our search
 		if strings.ToLower(apiSetName) == searchName {
-			// Found match, choose best value entry
 			if entry.ValueCount == 0 {
 				continue
 			}
@@ -420,8 +376,6 @@ func resolveApiSet(dllName string) string {
 				if realDllLen == 0 || realDllLen > 256 {
 					continue
 				}
-
-				// If NameLength>0 this is a host-specific override; prefer the first such entry
 				dllSlice := make([]uint16, realDllLen)
 				for j := uint32(0); j < realDllLen; j++ {
 					dllSlice[j] = realDllBytes[j]
@@ -594,11 +548,11 @@ func resolveForwardedExportWithStack(forwarderString string, resolutionStack map
 	if resolutionStack[forwarderString] {
 		return 0 // Circular reference detected
 	}
-	
+
 	// Add current forwarder to the stack
 	resolutionStack[forwarderString] = true
 	defer delete(resolutionStack, forwarderString)
-	
+
 	parts := strings.Split(forwarderString, ".")
 	if len(parts) != 2 {
 		return 0
@@ -613,12 +567,12 @@ func resolveForwardedExportWithStack(forwarderString string, resolutionStack map
 
 	// Handle API Set DLLs - resolve them to their actual implementation
 	actualDLL := resolveApiSet(targetDLL)
-	
+
 	// Avoid circular resolution: if the API set resolves back to the same DLL
 	// that we're already resolving from, try loading the original API set DLL
 	var dllHash uint32
 	var moduleBase uintptr
-	
+
 	if strings.EqualFold(actualDLL, targetDLL) {
 		// API set couldn't be resolved, try loading it directly
 		dllHash = obf.GetHash(targetDLL)

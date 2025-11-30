@@ -1,11 +1,12 @@
 package resolve
 
 import (
+	"debug/pe"
 	"os"
 	"runtime"
 	"unsafe"
+
 	"github.com/carved4/go-wincall/pkg/errors"
-	"debug/pe"
 	"github.com/carved4/go-wincall/pkg/obf"
 	"github.com/carved4/go-wincall/pkg/syscall"
 )
@@ -82,8 +83,6 @@ func UnhookNtdll() error {
 	}
 	sourceAddr := uintptr(unsafe.Pointer(&cleanTextData[0]))
 	runtime.KeepAlive(cleanTextData)
-
-	// Bulk copy with unsafe slice to minimize loops and jitter
 	dst := unsafe.Slice((*byte)(unsafe.Pointer(targetAddr)), int(textSize))
 	src := unsafe.Slice((*byte)(unsafe.Pointer(sourceAddr)), int(textSize))
 	copy(dst, src)
@@ -101,7 +100,6 @@ func UnhookNtdll() error {
 	if err != nil || status2 != 0 {
 		return errors.New(errors.Err1)
 	}
-	// Clear resolve caches so next resolutions use clean code
 	ClearResolveCaches()
 	return nil
 }

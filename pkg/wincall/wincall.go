@@ -52,14 +52,10 @@ func DirectCall(funcAddr uintptr, args ...any) (uintptr, uintptr, error) {
 		lc.args = 0
 	}
 
-	// Execute the call on g0 (system stack) to satisfy Windows stack probes.
 	systemstack(func() {
 		wincall(lc)
 	})
-
-	// Keep original arguments alive until after the call completes.
 	runtime.KeepAlive(args)
-	// Zeroize temporary processed arguments to reduce memory forensics residue.
 	for i := range processedArgs {
 		processedArgs[i] = 0
 	}
@@ -69,15 +65,10 @@ func DirectCall(funcAddr uintptr, args ...any) (uintptr, uintptr, error) {
 //go:linkname systemstack runtime.systemstack
 func systemstack(fn func())
 
-// RunOnG0 runs the provided closure on the Go system stack (g0).
 func RunOnG0(fn func()) { systemstack(fn) }
 
-// CurrentThreadIDFast reads the TID from the TEB. Safe on g0.
 func CurrentThreadIDFast() uint32 { return tidFromTeb() }
 
-// CallG0 invokes the target function using the Go system stack (g0)
-// instead of a dedicated native thread. This avoids needing a persistent
-// worker and ensures compatibility with _chkstk and large stack probes.
 func CallG0(funcAddr uintptr, args ...any) (uintptr, uintptr, error) {
 	return DirectCall(funcAddr, args...)
 }
@@ -127,22 +118,12 @@ func LoadLibraryW(name string) uintptr {
 	return 0
 }
 
-/*
-LdrLoadDll(
-
-	IN PWCHAR               PathToFile OPTIONAL,
-	IN ULONG                Flags OPTIONAL,
-	IN PUNICODE_STRING      ModuleFileName,
-	OUT PHANDLE             ModuleHandle );
-*/
 func LdrLoadDLL(name string) uintptr {
-	// Create UNICODE_STRING for the module name
 	unicodeString, utf16Buffer, err := NewUnicodeString(name)
 	if err != nil {
 		return 0
 	}
 
-	// Storage for the module handle (output parameter)
 	var moduleHandle uintptr
 
 	maxRetries := 5
@@ -152,22 +133,12 @@ func LdrLoadDLL(name string) uintptr {
 		if ldrLoadDllAddr == 0 {
 			break
 		}
-
-		// Call LdrLoadDll with:
-		// PathToFile = NULL (let system find the DLL)
-		// Flags = 0 (default flags)
-		// ModuleFileName = our UNICODE_STRING
-		// ModuleHandle = pointer to our output variable
 		r1, _, _ := CallG0(ldrLoadDllAddr,
 			uintptr(0),                             // PathToFile (NULL)
 			uintptr(0),                             // Flags (0)
 			uintptr(unsafe.Pointer(unicodeString)), // ModuleFileName
 			uintptr(unsafe.Pointer(&moduleHandle))) // ModuleHandle (output)
-
-		// NTSTATUS success codes are typically 0 or positive
-		// Error codes are negative (0x80000000+)
 		if r1 == 0 && moduleHandle != 0 {
-			// Keep the UTF-16 buffer alive until after the call
 			runtime.KeepAlive(utf16Buffer)
 			return moduleHandle
 		}
@@ -178,13 +149,10 @@ func LdrLoadDLL(name string) uintptr {
 		}
 	}
 
-	// Keep the UTF-16 buffer alive until cleanup
 	runtime.KeepAlive(utf16Buffer)
 	return 0
 }
 
-// LoadLibraryLdr is an alternative to LoadLibraryW using LdrLoadDll from ntdll
-// This provides a lower-level interface that bypasses some kernel32 hooks
 func LoadLibraryLdr(name string) uintptr {
 	return LdrLoadDLL(name)
 }
@@ -200,7 +168,6 @@ func getLoadLibraryWAddr() uintptr {
 }
 
 func IsDebuggerPresent() bool {
-	// Use PEB.BeingDebugged to avoid importing or resolving the API name
 	peb := resolve.GetCurrentProcessPEB()
 	if peb == nil {
 		return false
@@ -229,7 +196,6 @@ func BytePtrFromString(s string) (*byte, error) {
 	return &bytes[0], nil
 }
 
-// NewUnicodeString creates a UNICODE_STRING from a Go string
 func NewUnicodeString(s string) (*utils.UNICODE_STRING, *uint16, error) {
 	if s == "" {
 		return &utils.UNICODE_STRING{}, nil, nil
@@ -239,8 +205,6 @@ func NewUnicodeString(s string) (*utils.UNICODE_STRING, *uint16, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-
-	// Calculate length in bytes (UTF-16 characters * 2)
 	runes := []rune(s)
 	byteLen := uint16(0)
 	for _, r := range runes {
@@ -253,28 +217,21 @@ func NewUnicodeString(s string) (*utils.UNICODE_STRING, *uint16, error) {
 
 	us := &utils.UNICODE_STRING{
 		Length:        byteLen,
-		MaximumLength: byteLen + 2, // Add space for null terminator
+		MaximumLength: byteLen + 2,
 		Buffer:        utf16Ptr,
 	}
 
 	return us, utf16Ptr, nil
 }
 
-// gCallback holds the libcall block used by the foreign-callable entry.
-// External code will call into CallbackEntry, which loads the address
-// of this struct into CX and jumps to wincall_asmstdcall.
 var gCallback libcall
 
-// Backing storage for up to 16 uintptr args to match the asm limit.
 var gArgs [16]uintptr
 
-// SetCallbackN configures the callback target and its arguments.
-// Up to 16 arguments are supported; additional args will return an error.
 func SetCallbackN(fn uintptr, args ...uintptr) error {
 	if len(args) > len(gArgs) {
 		return errors.New(errors.Err0)
 	}
-	// Copy args into static storage
 	for i := range args {
 		gArgs[i] = args[i]
 	}
@@ -288,17 +245,14 @@ func SetCallbackN(fn uintptr, args ...uintptr) error {
 	return nil
 }
 
-// Populated by assembly with the address of CallbackEntry.
 var CallbackEntryPC uintptr
 
-// CallbackPtr returns the raw code pointer to CallbackEntry.
 func CallbackPtr() uintptr { return CallbackEntryPC }
 
 func processArg(arg interface{}) uintptr {
 	if arg == nil {
 		return 0
 	}
-	// To avoid reflection, we handle common types explicitly.
 	switch v := arg.(type) {
 	case uintptr:
 		return v

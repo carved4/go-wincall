@@ -12,20 +12,15 @@ import (
 )
 
 func init() {
-	// Set up the LoadLibraryW callback to avoid circular dependencies
 	resolve.SetLoadLibraryCallback(wincall.LdrLoadDLL)
 }
 
-// CallG0 wraps calling a function pointer on the Go system stack (g0).
-// Prefer this over CallWorker if you don't need the persistent native thread.
 func CallG0(funcAddr uintptr, args ...any) (uintptr, uintptr, error) {
 	return wincall.CallG0(funcAddr, args...)
 }
 
-// CurrentThreadIDFast reads TID from TEB (no syscalls). Safe on g0.
 func CurrentThreadIDFast() uint32 { return wincall.CurrentThreadIDFast() }
 
-// RunOnG0 executes f on the system stack.
 func RunOnG0(f func()) { wincall.RunOnG0(f) }
 
 func LoadLibraryW(name string) uintptr {
@@ -53,7 +48,6 @@ func IsDebuggerPresent() bool {
 }
 
 func Call(dllName, funcName interface{}, args ...interface{}) (uintptr, uintptr, error) {
-	// Convert parameters to strings (handles both string and obfuscated formats)
 	var dllNameStr, funcNameStr string
 
 	switch v := dllName.(type) {
@@ -83,8 +77,6 @@ func Call(dllName, funcName interface{}, args ...interface{}) (uintptr, uintptr,
 	if funcAddr == 0 {
 		return 0, 0, errors.New(errors.Err2)
 	}
-
-	// Execute on g0 instead of the persistent native worker thread.
 	r1, r2, err := wincall.CallG0(funcAddr, args...)
 	if err != nil {
 		return 0, 0, err
@@ -97,11 +89,9 @@ func UTF16ptr(s string) (*uint16, error) {
 	return ptr, err
 }
 
-// Callback configuration and pointer exposure for foreign callers
 func SetCallbackN(fn uintptr, args ...uintptr) error { return wincall.SetCallbackN(fn, args...) }
 func CallbackPtr() uintptr                           { return wincall.CallbackPtr() }
 
-// Expose syscall helpers for convenience in callers
 func Syscall(syscallNum uint32, args ...uintptr) (uintptr, error) {
 	return pkgsys.Syscall(syscallNum, args...)
 }
@@ -111,22 +101,15 @@ func IndirectSyscall(syscallNum uint32, syscallAddr uintptr, args ...uintptr) (u
 
 func SyscallDirectCallbackPtr() uintptr { return wincall.SyscallDirectEntryPC }
 
-// Removed unused Nt* wrappers for events/thread creation/waiting.
-
-// UnhookNtdll restores clean ntdll.dll from disk to remove any hooks
 func UnhookNtdll() error {
 	return resolve.UnhookNtdll()
 }
 
-// ClearCaches clears resolve-level and hash caches
 func ClearCaches() {
 	resolve.ClearResolveCaches()
-	// optional: clear hash cache too
 	obf.ClearHashCache()
 }
 
-// GetSyscallWithAntiHook attempts to resolve syscall with anti-hooking measures
-// Returns syscall number, trampoline address, and error
 func GetSyscall(hash uint32) resolve.Syscall {
 	return resolve.GetSyscall(hash)
 }

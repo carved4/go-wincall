@@ -2,8 +2,8 @@ package resolve
 
 import (
 	"sort"
-	"unsafe"
 	"strings"
+	"unsafe"
 
 	"github.com/carved4/go-wincall/pkg/obf"
 )

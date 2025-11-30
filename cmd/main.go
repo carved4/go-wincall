@@ -90,10 +90,9 @@ func customResolver(scanner *bufio.Scanner) {
 		funcInput := strings.TrimSpace(scanner.Text())
 
 		fmt.Printf("\nloading %s...\n", dllName)
-		wincall.LoadLibraryW(dllName)
-		// Display current thread identity using g0-safe TEB read and confirm via CallG0
+		wincall.LoadLibraryLdr(dllName)
 		tidCur := wincall.CurrentThreadIDFast()
-		k32 := wincall.LoadLibraryW("kernel32.dll")
+		k32 := wincall.GetModuleBase(wincall.GetHash("kernel32.dll"))
 		getTid := wincall.GetFunctionAddress(k32, wincall.GetHash("GetCurrentThreadId"))
 		var tidG0 uint32
 		if getTid != 0 {
@@ -199,7 +198,7 @@ func exampleHighLevel() {
 
 // manual usage
 func exampleManual() {
-	wincall.LoadLibraryW("user32.dll")
+	wincall.LoadLibraryLdr("user32.dll")
 	dllHash := wincall.GetHash("user32.dll")
 	moduleBase := wincall.GetModuleBase(dllHash)
 
