@@ -66,7 +66,7 @@ func UnhookNtdll() error {
 		currentProcess,
 		uintptr(unsafe.Pointer(&targetAddr)),
 		uintptr(unsafe.Pointer(&textSize)),
-		0x40, // PAGE_EXECUTE_READWRITE
+		0x40, // page_execute_readwrite
 		uintptr(unsafe.Pointer(&oldProtect)),
 	)
 	status := uint32(result)

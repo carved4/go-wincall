@@ -16,15 +16,11 @@ import (
 func main() {
 	fmt.Println("go-wincall demo :3")
 	ntProtect := resolve.GetSyscall(wincall.GetHash("NtProtectVirtualMemory"))
-	fmt.Printf("ntprotect syscall resolved to 0x00%x, ssn %d\n", ntProtect.Address, ntProtect.SSN)
-	// Pin the main goroutine to a single OS thread so all g0 calls
-	// in this process run on the same thread for consistent TID.
 	runtime.LockOSThread()
 	wincall.UnhookNtdll()
 	if wincall.IsDebuggerPresent() {
 		os.Exit(1)
 	}
-	// Verify g0 execution using a tiny NOSPLIT TEB reader to avoid stack growth
 	tidBefore := wincall.CurrentThreadIDFast()
 	var tidOnG0 uint32
 	wincall.RunOnG0(func() { tidOnG0 = wincall.CurrentThreadIDFast() })

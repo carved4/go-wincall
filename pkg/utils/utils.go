@@ -2,7 +2,6 @@ package utils
 
 import "unsafe"
 
-
 type LIST_ENTRY struct {
 	Flink *LIST_ENTRY
 	Blink *LIST_ENTRY
@@ -35,122 +34,122 @@ type PEB_LDR_DATA struct {
 }
 
 type PEB struct {
-	InheritedAddressSpace      byte
-	ReadImageFileExecOptions   byte
-	BeingDebugged              byte
-	BitField                   byte
-	Mutant                     uintptr
-	ImageBaseAddress           uintptr
-	Ldr                        *PEB_LDR_DATA
-	ProcessParameters          *RTL_USER_PROCESS_PARAMETERS
-	SubSystemData              uintptr
-	ProcessHeap                uintptr
-	FastPebLock                uintptr
-	AtlThunkSListPtr           uintptr
-	IFEOKey                    uintptr
-	CrossProcessFlags          uint32
-	KernelCallbackTable        uintptr
-	SystemReserved             uint32
-	AtlThunkSListPtr32         uint32
-	ApiSetMap                  uintptr
-	TlsExpansionCounter        uint32
-	TlsBitmap                  uintptr
-	TlsBitmapBits              [2]uint32
-	ReadOnlySharedMemoryBase   uintptr
-	SharedData                 uintptr
-	ReadOnlyStaticServerData   uintptr
-	AnsiCodePageData           uintptr
-	OemCodePageData            uintptr
-	UnicodeCaseTableData       uintptr
-	NumberOfProcessors         uint32
-	NtGlobalFlag               uint32
-	CriticalSectionTimeout     int64
-	HeapSegmentReserve         uintptr
-	HeapSegmentCommit          uintptr
-	HeapDeCommitTotalFreeThreshold uintptr
-	HeapDeCommitFreeBlockThreshold uintptr
-	NumberOfHeaps              uint32
-	MaximumNumberOfHeaps       uint32
-	ProcessHeaps               uintptr
-	GdiSharedHandleTable       uintptr
-	ProcessStarterHelper       uintptr
-	GdiDCAttributeList         uint32
-	LoaderLock                 uintptr
-	OSMajorVersion             uint32
-	OSMinorVersion             uint32
-	OSBuildNumber              uint16
-	OSCSDVersion               uint16
-	OSPlatformId               uint32
-	ImageSubsystem             uint32
-	ImageSubsystemMajorVersion uint32
-	ImageSubsystemMinorVersion uint32
-	ActiveProcessAffinityMask  uintptr
-	GdiHandleBuffer            [60]uint32
-	PostProcessInitRoutine     uintptr
-	TlsExpansionBitmap         uintptr
-	TlsExpansionBitmapBits     [32]uint32
-	SessionId                  uint32
-	AppCompatFlags             uint64
-	AppCompatFlagsUser         uint64
-	pShimData                  uintptr
-	AppCompatInfo              uintptr
-	CSDVersion                 UNICODE_STRING
-	ActivationContextData      uintptr
-	ProcessAssemblyStorageMap  uintptr
-	SystemDefaultActivationContextData uintptr
-	SystemAssemblyStorageMap   uintptr
-	MinimumStackCommit         uintptr
-	FlsCallback                uintptr
-	FlsListHead                LIST_ENTRY
-	FlsBitmap                  uintptr
-	FlsBitmapBits              [4]uint32
-	FlsHighIndex               uint32
-	WerRegistrationData        uintptr
-	WerShipAssertPtr           uintptr
-	pUnused                    uintptr
-	pImageHeaderHash           uintptr
-	TracingFlags               uint32
-	CsrServerReadOnlySharedMemoryBase uint64
-	TppWorkerpListLock         uintptr
-	TppWorkerpList             LIST_ENTRY
-	WaitOnAddressHashTable     [128]uintptr
-	TelemetryCoverageHeader    uintptr
-	CloudFileFlags             uint32
-	CloudFileDiagFlags         uint32
-	PlaceholderCompatibilityMode byte
-	PlaceholderCompatibilityModeReserved [7]byte
-	LeapSecondData             uintptr
-	LeapSecondFlags            uint32
-	NtGlobalFlag2              uint32
+	InheritedAddressSpace                 byte
+	ReadImageFileExecOptions              byte
+	BeingDebugged                         byte
+	BitField                              byte
+	Mutant                                uintptr
+	ImageBaseAddress                      uintptr
+	Ldr                                   *PEB_LDR_DATA
+	ProcessParameters                     *RTL_USER_PROCESS_PARAMETERS
+	SubSystemData                         uintptr
+	ProcessHeap                           uintptr
+	FastPebLock                           uintptr
+	AtlThunkSListPtr                      uintptr
+	IFEOKey                               uintptr
+	CrossProcessFlags                     uint32
+	KernelCallbackTable                   uintptr
+	SystemReserved                        uint32
+	AtlThunkSListPtr32                    uint32
+	ApiSetMap                             uintptr
+	TlsExpansionCounter                   uint32
+	TlsBitmap                             uintptr
+	TlsBitmapBits                         [2]uint32
+	ReadOnlySharedMemoryBase              uintptr
+	SharedData                            uintptr
+	ReadOnlyStaticServerData              uintptr
+	AnsiCodePageData                      uintptr
+	OemCodePageData                       uintptr
+	UnicodeCaseTableData                  uintptr
+	NumberOfProcessors                    uint32
+	NtGlobalFlag                          uint32
+	CriticalSectionTimeout                int64
+	HeapSegmentReserve                    uintptr
+	HeapSegmentCommit                     uintptr
+	HeapDeCommitTotalFreeThreshold        uintptr
+	HeapDeCommitFreeBlockThreshold        uintptr
+	NumberOfHeaps                         uint32
+	MaximumNumberOfHeaps                  uint32
+	ProcessHeaps                          uintptr
+	GdiSharedHandleTable                  uintptr
+	ProcessStarterHelper                  uintptr
+	GdiDCAttributeList                    uint32
+	LoaderLock                            uintptr
+	OSMajorVersion                        uint32
+	OSMinorVersion                        uint32
+	OSBuildNumber                         uint16
+	OSCSDVersion                          uint16
+	OSPlatformId                          uint32
+	ImageSubsystem                        uint32
+	ImageSubsystemMajorVersion            uint32
+	ImageSubsystemMinorVersion            uint32
+	ActiveProcessAffinityMask             uintptr
+	GdiHandleBuffer                       [60]uint32
+	PostProcessInitRoutine                uintptr
+	TlsExpansionBitmap                    uintptr
+	TlsExpansionBitmapBits                [32]uint32
+	SessionId                             uint32
+	AppCompatFlags                        uint64
+	AppCompatFlagsUser                    uint64
+	pShimData                             uintptr
+	AppCompatInfo                         uintptr
+	CSDVersion                            UNICODE_STRING
+	ActivationContextData                 uintptr
+	ProcessAssemblyStorageMap             uintptr
+	SystemDefaultActivationContextData    uintptr
+	SystemAssemblyStorageMap              uintptr
+	MinimumStackCommit                    uintptr
+	FlsCallback                           uintptr
+	FlsListHead                           LIST_ENTRY
+	FlsBitmap                             uintptr
+	FlsBitmapBits                         [4]uint32
+	FlsHighIndex                          uint32
+	WerRegistrationData                   uintptr
+	WerShipAssertPtr                      uintptr
+	pUnused                               uintptr
+	pImageHeaderHash                      uintptr
+	TracingFlags                          uint32
+	CsrServerReadOnlySharedMemoryBase     uint64
+	TppWorkerpListLock                    uintptr
+	TppWorkerpList                        LIST_ENTRY
+	WaitOnAddressHashTable                [128]uintptr
+	TelemetryCoverageHeader               uintptr
+	CloudFileFlags                        uint32
+	CloudFileDiagFlags                    uint32
+	PlaceholderCompatibilityMode          byte
+	PlaceholderCompatibilityModeReserved  [7]byte
+	LeapSecondData                        uintptr
+	LeapSecondFlags                       uint32
+	NtGlobalFlag2                         uint32
 }
 type RTL_USER_PROCESS_PARAMETERS struct {
-	MaximumLength     uint32
-	Length            uint32
-	Flags             uint32
-	DebugFlags        uint32
-	ConsoleHandle     uintptr
-	ConsoleFlags      uint32
-	StandardInput     uintptr
-	StandardOutput    uintptr
-	StandardError     uintptr
-	CurrentDirectory  CURDIR
-	DllPath           UNICODE_STRING
-	ImagePathName     UNICODE_STRING
-	CommandLine       UNICODE_STRING
-	Environment       uintptr
-	StartingX         uint32
-	StartingY         uint32
-	CountX            uint32
-	CountY            uint32
-	CountCharsX       uint32
-	CountCharsY       uint32
-	FillAttribute     uint32
-	WindowFlags       uint32
-	ShowWindowFlags   uint32
-	WindowTitle       UNICODE_STRING
-	DesktopInfo       UNICODE_STRING
-	ShellInfo         UNICODE_STRING
-	RuntimeData       UNICODE_STRING
+	MaximumLength      uint32
+	Length             uint32
+	Flags              uint32
+	DebugFlags         uint32
+	ConsoleHandle      uintptr
+	ConsoleFlags       uint32
+	StandardInput      uintptr
+	StandardOutput     uintptr
+	StandardError      uintptr
+	CurrentDirectory   CURDIR
+	DllPath            UNICODE_STRING
+	ImagePathName      UNICODE_STRING
+	CommandLine        UNICODE_STRING
+	Environment        uintptr
+	StartingX          uint32
+	StartingY          uint32
+	CountX             uint32
+	CountY             uint32
+	CountCharsX        uint32
+	CountCharsY        uint32
+	FillAttribute      uint32
+	WindowFlags        uint32
+	ShowWindowFlags    uint32
+	WindowTitle        UNICODE_STRING
+	DesktopInfo        UNICODE_STRING
+	ShellInfo          UNICODE_STRING
+	RuntimeData        UNICODE_STRING
 	CurrentDirectories [32]RTL_DRIVE_LETTER_CURDIR
 }
 
@@ -166,38 +165,79 @@ type CURDIR struct {
 	Handle  uintptr
 }
 
-func utf16BytesToString(b []uint16) string {
-	runes := make([]rune, 0, len(b))
-	for i := 0; i < len(b); i++ {
-		r := rune(b[i])
-		if r >= 0xD800 && r <= 0xDBFF && i+1 < len(b) {
-			r2 := rune(b[i+1])
-			if r2 >= 0xDC00 && r2 <= 0xDFFF {
-				r = (r-0xD800)<<10 + (r2 - 0xDC00) + 0x10000
-				i++
-			}
-		}
-		runes = append(runes, r)
-	}
-	return string(runes)
-}
-
+// UTF16ToString converts a null terminated utf16 string to a go string :3
+// optimized to minimize allocations: directly builds utf8 bytes without
+// intermediate rune slice or utf16 slice copy
 func UTF16ToString(ptr *uint16) string {
 	if ptr == nil {
 		return ""
 	}
 
+	// first pass: count utf16 chars and estimate utf8 length
 	length := 0
-	for tmp := ptr; *tmp != 0; tmp = (*uint16)(unsafe.Pointer(uintptr(unsafe.Pointer(tmp)) + 2)) {
+	utf8Len := 0
+	for tmp := uintptr(unsafe.Pointer(ptr)); ; {
+		c := *(*uint16)(unsafe.Pointer(tmp))
+		if c == 0 {
+			break
+		}
 		length++
+		// estimate utf8 bytes needed
+		if c < 0x80 {
+			utf8Len++
+		} else if c < 0x800 {
+			utf8Len += 2
+		} else if c >= 0xD800 && c <= 0xDBFF {
+			// high surrogate, will combine with low surrogate for 4 byte sequence
+			utf8Len += 4
+		} else if c >= 0xDC00 && c <= 0xDFFF {
+			// low surrogate, already counted with high surrogate
+		} else {
+			utf8Len += 3
+		}
+		tmp += 2
 	}
 
-	slice := make([]uint16, length)
+	if length == 0 {
+		return ""
+	}
+
+	// single allocation for result :p
+	buf := make([]byte, 0, utf8Len)
+	base := uintptr(unsafe.Pointer(ptr))
+
 	for i := 0; i < length; i++ {
-		slice[i] = *(*uint16)(unsafe.Pointer(uintptr(unsafe.Pointer(ptr)) + uintptr(i*2)))
+		c := *(*uint16)(unsafe.Pointer(base + uintptr(i*2)))
+		if c == 0 {
+			break
+		}
+
+		// handle surrogate pairs
+		if c >= 0xD800 && c <= 0xDBFF && i+1 < length {
+			c2 := *(*uint16)(unsafe.Pointer(base + uintptr((i+1)*2)))
+			if c2 >= 0xDC00 && c2 <= 0xDFFF {
+				// decode surrogate pair to rune
+				r := rune(c-0xD800)<<10 + rune(c2-0xDC00) + 0x10000
+				// encode as 4 byte utf8
+				buf = append(buf,
+					byte(0xF0|(r>>18)),
+					byte(0x80|((r>>12)&0x3F)),
+					byte(0x80|((r>>6)&0x3F)),
+					byte(0x80|(r&0x3F)))
+				i++ // skip low surrogate
+				continue
+			}
+		}
+
+		// regular bmp character
+		if c < 0x80 {
+			buf = append(buf, byte(c))
+		} else if c < 0x800 {
+			buf = append(buf, byte(0xC0|(c>>6)), byte(0x80|(c&0x3F)))
+		} else {
+			buf = append(buf, byte(0xE0|(c>>12)), byte(0x80|((c>>6)&0x3F)), byte(0x80|(c&0x3F)))
+		}
 	}
 
-	return string(utf16BytesToString(slice))
+	return string(buf)
 }
-
-

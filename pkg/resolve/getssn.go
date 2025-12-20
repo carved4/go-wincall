@@ -70,7 +70,7 @@ func GetSyscall(hash uint32) Syscall {
 	if targetAddr == 0 {
 		return Syscall{}
 	}
-	// sorting them gives us the ssns, thanks windows
+	// sorting them gives us the ssns, thanks windows :p
 	// anti hook stuff is in GetTrampoline asm implementation, thanks acheron
 	sort.Slice(syscalls, func(i, j int) bool {
 		return syscalls[i].Address < syscalls[j].Address
@@ -80,7 +80,7 @@ func GetSyscall(hash uint32) Syscall {
 		if sc.Address == targetAddr {
 			return Syscall{
 				Address: targetAddr,
-				SSN:     uint32(i) - 4, // hack: subtract the functions that have nt* in name but aren't syscalls
+				SSN:     uint32(i) - 4, // hack: subtract the functions that have nt* in name but aren't syscalls :0
 			}
 		}
 	}

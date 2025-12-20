@@ -114,7 +114,7 @@ func LoadLibraryW(name string) uintptr {
 			time.Sleep(time.Duration(50+i*50)*time.Millisecond + jitter)
 		}
 	}
-	// we should never get here
+	// we should never get here :0
 	return 0
 }
 
@@ -134,10 +134,10 @@ func LdrLoadDLL(name string) uintptr {
 			break
 		}
 		r1, _, _ := CallG0(ldrLoadDllAddr,
-			uintptr(0),                             // PathToFile (NULL)
-			uintptr(0),                             // Flags (0)
-			uintptr(unsafe.Pointer(unicodeString)), // ModuleFileName
-			uintptr(unsafe.Pointer(&moduleHandle))) // ModuleHandle (output)
+			uintptr(0),                             // pathtofile (null)
+			uintptr(0),                             // flags (0)
+			uintptr(unsafe.Pointer(unicodeString)), // modulefilename
+			uintptr(unsafe.Pointer(&moduleHandle))) // modulehandle (output)
 		if r1 == 0 && moduleHandle != 0 {
 			runtime.KeepAlive(utf16Buffer)
 			return moduleHandle
@@ -175,19 +175,92 @@ func IsDebuggerPresent() bool {
 	return peb.BeingDebugged != 0
 }
 
+// UTF16PtrFromString converts a go string to a null terminated utf16 pointer :3
+// optimized to avoid rune slice allocation, processes utf8 bytes directly
 func UTF16PtrFromString(s string) (*uint16, error) {
-	runes := []rune(s)
-	buf := make([]uint16, len(runes)+1)
-	for i, r := range runes {
+	if s == "" {
+		// return pointer to single null terminator
+		buf := make([]uint16, 1)
+		return &buf[0], nil
+	}
+
+	// first pass: compute utf16 length
+	n := 0
+	for i := 0; i < len(s); {
+		c := s[i]
+		if c < 0x80 {
+			n++
+			i++
+			continue
+		}
+		// decode utf8 manually to avoid utf8.DecodeRuneInString allocation
+		var r rune
+		var size int
+		if c&0xE0 == 0xC0 && i+1 < len(s) {
+			r = rune(c&0x1F)<<6 | rune(s[i+1]&0x3F)
+			size = 2
+		} else if c&0xF0 == 0xE0 && i+2 < len(s) {
+			r = rune(c&0x0F)<<12 | rune(s[i+1]&0x3F)<<6 | rune(s[i+2]&0x3F)
+			size = 3
+		} else if c&0xF8 == 0xF0 && i+3 < len(s) {
+			r = rune(c&0x07)<<18 | rune(s[i+1]&0x3F)<<12 | rune(s[i+2]&0x3F)<<6 | rune(s[i+3]&0x3F)
+			size = 4
+		} else {
+			// invalid utf8, skip byte
+			n++
+			i++
+			continue
+		}
 		if r <= 0xFFFF {
-			buf[i] = uint16(r)
+			n++
+		} else {
+			n += 2 // surrogate pair
+		}
+		i += size
+	}
+
+	// allocate utf16 buffer plus null terminator
+	buf := make([]uint16, n+1)
+
+	// second pass: encode
+	j := 0
+	for i := 0; i < len(s); {
+		c := s[i]
+		if c < 0x80 {
+			buf[j] = uint16(c)
+			j++
+			i++
+			continue
+		}
+		var r rune
+		var size int
+		if c&0xE0 == 0xC0 && i+1 < len(s) {
+			r = rune(c&0x1F)<<6 | rune(s[i+1]&0x3F)
+			size = 2
+		} else if c&0xF0 == 0xE0 && i+2 < len(s) {
+			r = rune(c&0x0F)<<12 | rune(s[i+1]&0x3F)<<6 | rune(s[i+2]&0x3F)
+			size = 3
+		} else if c&0xF8 == 0xF0 && i+3 < len(s) {
+			r = rune(c&0x07)<<18 | rune(s[i+1]&0x3F)<<12 | rune(s[i+2]&0x3F)<<6 | rune(s[i+3]&0x3F)
+			size = 4
+		} else {
+			buf[j] = uint16(c)
+			j++
+			i++
+			continue
+		}
+		if r <= 0xFFFF {
+			buf[j] = uint16(r)
+			j++
 		} else {
 			r -= 0x10000
-			buf[i] = 0xD800 + uint16(r>>10)
-			i++
-			buf[i] = 0xDC00 + uint16(r&0x3FF)
+			buf[j] = 0xD800 + uint16(r>>10)
+			buf[j+1] = 0xDC00 + uint16(r&0x3FF)
+			j += 2
 		}
+		i += size
 	}
+
 	return &buf[0], nil
 }
 
@@ -196,6 +269,8 @@ func BytePtrFromString(s string) (*byte, error) {
 	return &bytes[0], nil
 }
 
+// NewUnicodeString creates a UNICODE_STRING from a go string :p
+// optimized to compute byte length without rune slice allocation
 func NewUnicodeString(s string) (*utils.UNICODE_STRING, *uint16, error) {
 	if s == "" {
 		return &utils.UNICODE_STRING{}, nil, nil
@@ -205,14 +280,38 @@ func NewUnicodeString(s string) (*utils.UNICODE_STRING, *uint16, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	runes := []rune(s)
+
+	// compute byte length by processing utf8 directly
 	byteLen := uint16(0)
-	for _, r := range runes {
+	for i := 0; i < len(s); {
+		c := s[i]
+		if c < 0x80 {
+			byteLen += 2
+			i++
+			continue
+		}
+		var size int
+		var r rune
+		if c&0xE0 == 0xC0 && i+1 < len(s) {
+			r = rune(c&0x1F)<<6 | rune(s[i+1]&0x3F)
+			size = 2
+		} else if c&0xF0 == 0xE0 && i+2 < len(s) {
+			r = rune(c&0x0F)<<12 | rune(s[i+1]&0x3F)<<6 | rune(s[i+2]&0x3F)
+			size = 3
+		} else if c&0xF8 == 0xF0 && i+3 < len(s) {
+			r = rune(c&0x07)<<18 | rune(s[i+1]&0x3F)<<12 | rune(s[i+2]&0x3F)<<6 | rune(s[i+3]&0x3F)
+			size = 4
+		} else {
+			byteLen += 2
+			i++
+			continue
+		}
 		if r <= 0xFFFF {
 			byteLen += 2
 		} else {
-			byteLen += 4 // Surrogate pair
+			byteLen += 4 // surrogate pair
 		}
+		i += size
 	}
 
 	us := &utils.UNICODE_STRING{

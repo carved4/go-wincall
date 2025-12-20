@@ -2,7 +2,7 @@ package errors
 
 import "fmt"
 
-// Error codes
+// error codes :3
 const (
 	Err0 = 0
 	Err1 = 1
