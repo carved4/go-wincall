@@ -10,12 +10,10 @@ import (
 	"unsafe"
 
 	"github.com/carved4/go-wincall"
-	"github.com/carved4/go-wincall/pkg/resolve"
 )
 
 func main() {
 	fmt.Println("go-wincall demo :3")
-	ntProtect := resolve.GetSyscall(wincall.GetHash("NtProtectVirtualMemory"))
 	runtime.LockOSThread()
 	wincall.UnhookNtdll()
 	if wincall.IsDebuggerPresent() {
