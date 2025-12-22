@@ -94,39 +94,36 @@ r1, r2, err := wincall.CallG0(
 
 windows apis often return packed data that requires decoding. the library provides generic utility functions for common return value patterns:
 
-#### packed numeric data
+#### examples from cmd/main.go
 ```go
-// get system window background color
-r1, _, err := wincall.Call("user32", "GetSysColor", 5)
-
-// extract RGB components from packed color value
-r := wincall.ExtractByte(r1, 0)  // red component (0-255)
-g := wincall.ExtractByte(r1, 1)  // green component (0-255)
-b := wincall.ExtractByte(r1, 2)  // blue component (0-255)
-
-fmt.Printf("window color: rgb(%d, %d, %d) = #%02X%02X%02X\n", r, g, b, r, g, b)
-```
-
-#### string pointers
-```go
-// get command line as utf-16 string pointer
-r1, _, err := wincall.Call("kernel32", "GetCommandLineW")
-commandLinePtr := r1
-
-// decode utf-16 string from pointer
+commandLinePtr, _, _ := wincall.Call("kernel32", "GetCommandLineW")
 commandLine := wincall.ReadUTF16String(commandLinePtr)
 fmt.Printf("command line: %s\n", commandLine)
-```
 
-#### bit field extraction
-```go
-// extract arbitrary bit ranges from any return value
-packedValue := uintptr(0x12345678)
+color, _, _ := wincall.Call("user32", "GetSysColor", 5)
+r := wincall.ExtractByte(color, 0)
+g := wincall.ExtractByte(color, 1)
+b := wincall.ExtractByte(color, 2)
+fmt.Printf("window color: rgb(%d, %d, %d) = #%02X%02X%02X\n", r, g, b, r, g, b)
 
-valueType := wincall.ExtractBits(packedValue, 0, 4)   // bits 0-3
-subtype := wincall.ExtractBits(packedValue, 4, 4)     // bits 4-7
-id := wincall.ExtractBits(packedValue, 8, 8)          // bits 8-15
-data := wincall.ExtractBits(packedValue, 16, 16)      // bits 16-31
+var buffer [260]byte
+length, _, _ := wincall.Call("kernel32", "GetWindowsDirectoryA", &buffer[0], 260)
+if length > 0 {
+	winDir := wincall.ReadANSIString(uintptr(unsafe.Pointer(&buffer[0])))
+	fmt.Printf("windows directory: %s\n", winDir)
+}
+
+title, _ := wincall.UTF16ptr("high level api")
+message, _ := wincall.UTF16ptr("twitter.com/owengsmt")
+
+wincall.Call("user32.dll", "MessageBoxW",
+	0,
+	message,
+	title,
+	0,
+)
+runtime.KeepAlive(title)
+runtime.KeepAlive(message)
 ```
 
 ### available functions
@@ -200,4 +197,3 @@ if syscallInfo.Address != 0 {
     )
 }
 ```
-

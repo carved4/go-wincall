@@ -178,9 +178,7 @@ func exampleHighLevel() {
 	title, _ := wincall.UTF16ptr("high level api")
 	message, _ := wincall.UTF16ptr("twitter.com/owengsmt")
 
-	wincall.Call("user32.dll", "MessageBoxW", // hwnd
-
-		// MB_OK
+	wincall.Call("user32.dll", "MessageBoxW",
 		0,
 		message,
 		title,
