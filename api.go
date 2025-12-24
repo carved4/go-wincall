@@ -3,7 +3,7 @@ package wincall
 import (
 	"unicode/utf16"
 	"unsafe"
-
+	"github.com/carved4/go-wincall/pkg/utils"
 	"github.com/carved4/go-wincall/pkg/errors"
 	"github.com/carved4/go-wincall/pkg/obf"
 	"github.com/carved4/go-wincall/pkg/resolve"
@@ -159,6 +159,9 @@ func SplitDwords(value uint64) (low, high uint32) {
 		uint32((value >> 32) & 0xFFFFFFFF)
 }
 
+func UTF16ToString(ptr *uint16) string {
+	return utils.UTF16ToString(ptr)
+}
 // ReadUTF16String reads a null terminated utf16 string from a memory pointer :3
 // used for apis that return LPWSTR/LPCWSTR pointers like GetCommandLineW
 func ReadUTF16String(ptr uintptr) string {
