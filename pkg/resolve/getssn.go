@@ -53,7 +53,7 @@ func GetSyscall(hash uint32) Syscall {
 
 		nameHash := obf.GetHash(nameString)
 
-		if strings.HasPrefix(nameString, "Nt") {
+		if strings.HasPrefix(nameString, "Nt") && !strings.HasPrefix(nameString, "Ntdll") {
 			ordinal := *(*uint16)(unsafe.Pointer(ordinalsAddr + uintptr(i*2)))
 			funcRVA := *(*uint32)(unsafe.Pointer(functionsAddr + uintptr(ordinal*4)))
 			funcAddr := moduleBase + uintptr(funcRVA)
@@ -80,7 +80,7 @@ func GetSyscall(hash uint32) Syscall {
 		if sc.Address == targetAddr {
 			return Syscall{
 				Address: targetAddr,
-				SSN:     uint32(i) - 4, // hack: subtract the functions that have nt* in name but aren't syscalls :0
+				SSN:     uint32(i),
 			}
 		}
 	}

@@ -131,29 +131,23 @@ runtime.KeepAlive(message)
 #### core api functions
 - `Call(dllName, funcName interface{}, args ...interface{}) (uintptr, uintptr, error)` - high-level api call
 - `CallG0(funcAddr uintptr, args ...any) (uintptr, uintptr, error)` - execute function on g0 (system stack)
-- `LoadLibraryW(name string) uintptr` - load dll and return base address
-- `LoadLibraryLdr(name string) uintptr` - load dll using LdrLoadDLL
+- `LoadLibrary(name string) uintptr` - load dll with ldrloaddll and return base address
 - `UTF16ptr(s string) (*uint16, error)` - convert go string to utf-16 pointer
 - `GetModuleBase(dllHash uint32) uintptr` - get module base from hash
 - `GetFunctionAddress(moduleBase uintptr, funcHash uint32) uintptr` - get function address from hash
-- `GetHash(s string) uint32` - generate sha256-based hash for string
+- `GetHash(s string) uint32` - get  hash for string
 - `IsDebuggerPresent() bool` - check if debugger is attached to current process
 - `CurrentThreadIDFast() uint32` - get current thread ID from TEB
 - `RunOnG0(f func())` - run function on g0 system stack
-- `ClearCaches()` - clear all internal caches
+- `ClearCache()` - clear all internal caches
 
 #### syscall functions
 - `Syscall(syscallNum uint32, args ...uintptr) (uintptr, error)` - direct system call
 - `IndirectSyscall(syscallNum uint32, syscallAddr uintptr, args ...uintptr) (uintptr, error)` - indirect system call
-- `SyscallDirectCallbackPtr() uintptr` - get syscall direct entry point
 - `GetSyscall(hash uint32) resolve.Syscall` - get syscall information (SSN and address)
 
-#### callback functions
-- `SetCallbackN(fn uintptr, args ...uintptr) error` - set callback with arguments
-- `CallbackPtr() uintptr` - get callback entry point
-
 #### anti-hooking and enhanced resolution functions
-- `UnhookNtdll() error` - restore original ntdll.dll .text section from disk, removing inline hooks
+- `UnhookNtdll()` - restore original ntdll.dll .text section from disk, removing inline hooks
 
 #### return value decoding utilities
 - `ExtractByte(value uintptr, byteIndex int) uint8` - extract specific byte from return value

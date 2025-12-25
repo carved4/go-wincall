@@ -1,13 +1,7 @@
 package obf
 
 import (
-	"sync"
 	"unsafe"
-)
-
-var (
-	hashCache      = make(map[string]uint32)
-	hashCacheMutex sync.RWMutex
 )
 
 func Hash(buffer []byte) uint32 {
@@ -97,20 +91,7 @@ func HashFromUTF16Len(ptr uintptr, charLen int) uint32 {
 // GetHash computes hash of a string, with caching :3
 // optimized to hash directly from string bytes without []byte allocation
 func GetHash(s string) uint32 {
-	hashCacheMutex.RLock()
-	if hash, ok := hashCache[s]; ok {
-		hashCacheMutex.RUnlock()
-		return hash
-	}
-	hashCacheMutex.RUnlock()
-
-	// hash directly from string without []byte allocation :p
 	hash := hashString(s)
-
-	hashCacheMutex.Lock()
-	hashCache[s] = hash
-	hashCacheMutex.Unlock()
-
 	return hash
 }
 
@@ -128,10 +109,4 @@ func hashString(s string) uint32 {
 		hash = ((hash << 5) + hash) + uint32(b)
 	}
 	return hash
-}
-
-func ClearHashCache() {
-	hashCacheMutex.Lock()
-	defer hashCacheMutex.Unlock()
-	hashCache = make(map[string]uint32)
 }

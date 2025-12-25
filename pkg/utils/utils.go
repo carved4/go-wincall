@@ -34,93 +34,93 @@ type PEB_LDR_DATA struct {
 }
 
 type PEB struct {
-	InheritedAddressSpace                 byte
-	ReadImageFileExecOptions              byte
-	BeingDebugged                         byte
-	BitField                              byte
-	Mutant                                uintptr
-	ImageBaseAddress                      uintptr
-	Ldr                                   *PEB_LDR_DATA
-	ProcessParameters                     *RTL_USER_PROCESS_PARAMETERS
-	SubSystemData                         uintptr
-	ProcessHeap                           uintptr
-	FastPebLock                           uintptr
-	AtlThunkSListPtr                      uintptr
-	IFEOKey                               uintptr
-	CrossProcessFlags                     uint32
-	KernelCallbackTable                   uintptr
-	SystemReserved                        uint32
-	AtlThunkSListPtr32                    uint32
-	ApiSetMap                             uintptr
-	TlsExpansionCounter                   uint32
-	TlsBitmap                             uintptr
-	TlsBitmapBits                         [2]uint32
-	ReadOnlySharedMemoryBase              uintptr
-	SharedData                            uintptr
-	ReadOnlyStaticServerData              uintptr
-	AnsiCodePageData                      uintptr
-	OemCodePageData                       uintptr
-	UnicodeCaseTableData                  uintptr
-	NumberOfProcessors                    uint32
-	NtGlobalFlag                          uint32
-	CriticalSectionTimeout                int64
-	HeapSegmentReserve                    uintptr
-	HeapSegmentCommit                     uintptr
-	HeapDeCommitTotalFreeThreshold        uintptr
-	HeapDeCommitFreeBlockThreshold        uintptr
-	NumberOfHeaps                         uint32
-	MaximumNumberOfHeaps                  uint32
-	ProcessHeaps                          uintptr
-	GdiSharedHandleTable                  uintptr
-	ProcessStarterHelper                  uintptr
-	GdiDCAttributeList                    uint32
-	LoaderLock                            uintptr
-	OSMajorVersion                        uint32
-	OSMinorVersion                        uint32
-	OSBuildNumber                         uint16
-	OSCSDVersion                          uint16
-	OSPlatformId                          uint32
-	ImageSubsystem                        uint32
-	ImageSubsystemMajorVersion            uint32
-	ImageSubsystemMinorVersion            uint32
-	ActiveProcessAffinityMask             uintptr
-	GdiHandleBuffer                       [60]uint32
-	PostProcessInitRoutine                uintptr
-	TlsExpansionBitmap                    uintptr
-	TlsExpansionBitmapBits                [32]uint32
-	SessionId                             uint32
-	AppCompatFlags                        uint64
-	AppCompatFlagsUser                    uint64
-	pShimData                             uintptr
-	AppCompatInfo                         uintptr
-	CSDVersion                            UNICODE_STRING
-	ActivationContextData                 uintptr
-	ProcessAssemblyStorageMap             uintptr
-	SystemDefaultActivationContextData    uintptr
-	SystemAssemblyStorageMap              uintptr
-	MinimumStackCommit                    uintptr
-	FlsCallback                           uintptr
-	FlsListHead                           LIST_ENTRY
-	FlsBitmap                             uintptr
-	FlsBitmapBits                         [4]uint32
-	FlsHighIndex                          uint32
-	WerRegistrationData                   uintptr
-	WerShipAssertPtr                      uintptr
-	pUnused                               uintptr
-	pImageHeaderHash                      uintptr
-	TracingFlags                          uint32
-	CsrServerReadOnlySharedMemoryBase     uint64
-	TppWorkerpListLock                    uintptr
-	TppWorkerpList                        LIST_ENTRY
-	WaitOnAddressHashTable                [128]uintptr
-	TelemetryCoverageHeader               uintptr
-	CloudFileFlags                        uint32
-	CloudFileDiagFlags                    uint32
-	PlaceholderCompatibilityMode          byte
-	PlaceholderCompatibilityModeReserved  [7]byte
-	LeapSecondData                        uintptr
-	LeapSecondFlags                       uint32
-	NtGlobalFlag2                         uint32
+	InheritedAddressSpace                byte
+	ReadImageFileExecOptions             byte
+	BeingDebugged                        byte
+	BitField                             byte
+	Mutant                               uintptr
+	ImageBaseAddress                     uintptr
+	Ldr                                  *PEB_LDR_DATA
+	ProcessParameters                    *RTL_USER_PROCESS_PARAMETERS
+	SubSystemData                        uintptr
+	ProcessHeap                          uintptr
+	FastPebLock                          uintptr
+	AtlThunkSListPtr                     uintptr
+	IFEOKey                              uintptr
+	CrossProcessFlags                    uint32
+	KernelCallbackTable                  uintptr
+	SystemReserved                       uint32
+	AtlThunkSListPtr32                   uint32
+	ApiSetMap                            uintptr
+	TlsExpansionCounter                  uint32
+	TlsBitmap                            uintptr
+	TlsBitmapBits                        [2]uint32
+	ReadOnlySharedMemoryBase             uintptr
+	SharedData                           uintptr
+	ReadOnlyStaticServerData             uintptr
+	AnsiCodePageData                     uintptr
+	OemCodePageData                      uintptr
+	UnicodeCaseTableData                 uintptr
+	NumberOfProcessors                   uint32
+	NtGlobalFlag                         uint32
+	CriticalSectionTimeout               int64
+	HeapSegmentReserve                   uintptr
+	HeapSegmentCommit                    uintptr
+	HeapDeCommitTotalFreeThreshold       uintptr
+	HeapDeCommitFreeBlockThreshold       uintptr
+	NumberOfHeaps                        uint32
+	MaximumNumberOfHeaps                 uint32
+	ProcessHeaps                         uintptr
+	GdiSharedHandleTable                 uintptr
+	ProcessStarterHelper                 uintptr
+	GdiDCAttributeList                   uint32
+	LoaderLock                           uintptr
+	OSMajorVersion                       uint32
+	OSMinorVersion                       uint32
+	OSBuildNumber                        uint16
+	OSCSDVersion                         uint16
+	OSPlatformId                         uint32
+	ImageSubsystem                       uint32
+	ImageSubsystemMajorVersion           uint32
+	ImageSubsystemMinorVersion           uint32
+	ActiveProcessAffinityMask            uintptr
+	GdiHandleBuffer                      [60]uint32
+	PostProcessInitRoutine               uintptr
+	TlsExpansionBitmap                   uintptr
+	TlsExpansionBitmapBits               [32]uint32
+	SessionId                            uint32
+	AppCompatFlags                       uint64
+	AppCompatFlagsUser                   uint64
+	pShimData                            uintptr
+	AppCompatInfo                        uintptr
+	CSDVersion                           UNICODE_STRING
+	ActivationContextData                uintptr
+	ProcessAssemblyStorageMap            uintptr
+	SystemDefaultActivationContextData   uintptr
+	SystemAssemblyStorageMap             uintptr
+	MinimumStackCommit                   uintptr
+	FlsCallback                          uintptr
+	FlsListHead                          LIST_ENTRY
+	FlsBitmap                            uintptr
+	FlsBitmapBits                        [4]uint32
+	FlsHighIndex                         uint32
+	WerRegistrationData                  uintptr
+	WerShipAssertPtr                     uintptr
+	pUnused                              uintptr
+	pImageHeaderHash                     uintptr
+	TracingFlags                         uint32
+	CsrServerReadOnlySharedMemoryBase    uint64
+	TppWorkerpListLock                   uintptr
+	TppWorkerpList                       LIST_ENTRY
+	WaitOnAddressHashTable               [128]uintptr
+	TelemetryCoverageHeader              uintptr
+	CloudFileFlags                       uint32
+	CloudFileDiagFlags                   uint32
+	PlaceholderCompatibilityMode         byte
+	PlaceholderCompatibilityModeReserved [7]byte
+	LeapSecondData                       uintptr
+	LeapSecondFlags                      uint32
+	NtGlobalFlag2                        uint32
 }
 type RTL_USER_PROCESS_PARAMETERS struct {
 	MaximumLength      uint32
@@ -163,6 +163,94 @@ type RTL_DRIVE_LETTER_CURDIR struct {
 type CURDIR struct {
 	DosPath UNICODE_STRING
 	Handle  uintptr
+}
+
+type IMAGE_DOS_HEADER struct {
+	E_magic    uint16
+	E_cblp     uint16
+	E_cp       uint16
+	E_crlc     uint16
+	E_cparhdr  uint16
+	E_minalloc uint16
+	E_maxalloc uint16
+	E_ss       uint16
+	E_sp       uint16
+	E_csum     uint16
+	E_ip       uint16
+	E_cs       uint16
+	E_lfarlc   uint16
+	E_ovno     uint16
+	E_res      [4]uint16
+	E_oemid    uint16
+	E_oeminfo  uint16
+	E_res2     [10]uint16
+	E_lfanew   uint32
+}
+
+type IMAGE_NT_HEADERS64 struct {
+	Signature      uint32
+	FileHeader     IMAGE_FILE_HEADER
+	OptionalHeader IMAGE_OPTIONAL_HEADER64
+}
+
+type IMAGE_FILE_HEADER struct {
+	Machine              uint16
+	NumberOfSections     uint16
+	TimeDateStamp        uint32
+	PointerToSymbolTable uint32
+	NumberOfSymbols      uint32
+	SizeOfOptionalHeader uint16
+	Characteristics      uint16
+}
+type IMAGE_SECTION_HEADER struct {
+	Name                 [8]byte
+	VirtualSize          uint32
+	VirtualAddress       uint32
+	SizeOfRawData        uint32
+	PointerToRawData     uint32
+	PointerToRelocations uint32
+	PointerToLinenumbers uint32
+	NumberOfRelocations  uint16
+	NumberOfLinenumbers  uint16
+	Characteristics      uint32
+}
+
+type IMAGE_OPTIONAL_HEADER64 struct {
+	Magic                       uint16
+	MajorLinkerVersion          uint8
+	MinorLinkerVersion          uint8
+	SizeOfCode                  uint32
+	SizeOfInitializedData       uint32
+	SizeOfUninitializedData     uint32
+	AddressOfEntryPoint         uint32
+	BaseOfCode                  uint32
+	ImageBase                   uint64
+	SectionAlignment            uint32
+	FileAlignment               uint32
+	MajorOperatingSystemVersion uint16
+	MinorOperatingSystemVersion uint16
+	MajorImageVersion           uint16
+	MinorImageVersion           uint16
+	MajorSubsystemVersion       uint16
+	MinorSubsystemVersion       uint16
+	Win32VersionValue           uint32
+	SizeOfImage                 uint32
+	SizeOfHeaders               uint32
+	CheckSum                    uint32
+	Subsystem                   uint16
+	DllCharacteristics          uint16
+	SizeOfStackReserve          uint64
+	SizeOfStackCommit           uint64
+	SizeOfHeapReserve           uint64
+	SizeOfHeapCommit            uint64
+	LoaderFlags                 uint32
+	NumberOfRvaAndSizes         uint32
+
+	DataDirectory [16]IMAGE_DATA_DIRECTORY
+}
+type IMAGE_DATA_DIRECTORY struct {
+	VirtualAddress uint32
+	Size           uint32
 }
 
 // UTF16ToString converts a null terminated utf16 string to a go string :3

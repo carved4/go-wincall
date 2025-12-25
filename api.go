@@ -3,11 +3,13 @@ package wincall
 import (
 	"unicode/utf16"
 	"unsafe"
-	"github.com/carved4/go-wincall/pkg/utils"
+
 	"github.com/carved4/go-wincall/pkg/errors"
 	"github.com/carved4/go-wincall/pkg/obf"
 	"github.com/carved4/go-wincall/pkg/resolve"
 	pkgsys "github.com/carved4/go-wincall/pkg/syscall"
+	"github.com/carved4/go-wincall/pkg/unhook"
+	"github.com/carved4/go-wincall/pkg/utils"
 	"github.com/carved4/go-wincall/pkg/wincall"
 )
 
@@ -22,10 +24,6 @@ func CallG0(funcAddr uintptr, args ...any) (uintptr, uintptr, error) {
 func CurrentThreadIDFast() uint32 { return wincall.CurrentThreadIDFast() }
 
 func RunOnG0(f func()) { wincall.RunOnG0(f) }
-
-func LoadLibraryW(name string) uintptr {
-	return wincall.LoadLibraryW(name)
-}
 
 func LoadLibraryLdr(name string) uintptr {
 	return wincall.LdrLoadDLL(name)
@@ -67,7 +65,7 @@ func Call(dllName, funcName interface{}, args ...interface{}) (uintptr, uintptr,
 	dllHash := GetHash(dllNameStr)
 	moduleBase := GetModuleBase(dllHash)
 	if moduleBase == 0 {
-		moduleBase = wincall.LoadLibraryW(dllNameStr)
+		moduleBase = wincall.LoadDll(dllNameStr)
 		if moduleBase == 0 {
 			return 0, 0, errors.New(errors.Err1)
 		}
@@ -89,9 +87,9 @@ func UTF16ptr(s string) (*uint16, error) {
 	return ptr, err
 }
 
-func SetCallbackN(fn uintptr, args ...uintptr) error { return wincall.SetCallbackN(fn, args...) }
-func CallbackPtr() uintptr                           { return wincall.CallbackPtr() }
-
+func UnhookNtdll() {
+	unhook.UnhookNtdll()
+}
 func Syscall(syscallNum uint32, args ...uintptr) (uintptr, error) {
 	return pkgsys.Syscall(syscallNum, args...)
 }
@@ -99,15 +97,8 @@ func IndirectSyscall(syscallNum uint32, syscallAddr uintptr, args ...uintptr) (u
 	return pkgsys.IndirectSyscall(syscallNum, syscallAddr, args...)
 }
 
-func SyscallDirectCallbackPtr() uintptr { return wincall.SyscallDirectEntryPC }
-
-func UnhookNtdll() error {
-	return resolve.UnhookNtdll()
-}
-
-func ClearCaches() {
+func ClearCache() {
 	resolve.ClearResolveCaches()
-	obf.ClearHashCache()
 }
 
 func GetSyscall(hash uint32) resolve.Syscall {
@@ -162,6 +153,7 @@ func SplitDwords(value uint64) (low, high uint32) {
 func UTF16ToString(ptr *uint16) string {
 	return utils.UTF16ToString(ptr)
 }
+
 // ReadUTF16String reads a null terminated utf16 string from a memory pointer :3
 // used for apis that return LPWSTR/LPCWSTR pointers like GetCommandLineW
 func ReadUTF16String(ptr uintptr) string {

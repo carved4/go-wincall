@@ -13,12 +13,9 @@ import (
 )
 
 var (
-	LdrLoadDllAddr   uintptr
-	loadLibraryWAddr uintptr
-	wincallOnce      sync.Once
+	LdrLoadDllAddr uintptr
+	wincallOnce    sync.Once
 )
-
-var SyscallDirectEntryPC uintptr
 
 //go:noescape
 func wincall(libcall *libcall)
@@ -83,39 +80,12 @@ func initAddresses() {
 		kernel32Base := resolve.GetModuleBase(kernel32Hash)
 		LdrLoadDllHash := obf.GetHash("LdrLoadDLL")
 		if kernel32Base != 0 && ntdllBase != 0 {
-			loadLibraryWHash := obf.GetHash("LoadLibraryW")
-			loadLibraryWAddr = resolve.GetFunctionAddress(kernel32Base, loadLibraryWHash)
 			LdrLoadDllAddr = resolve.GetFunctionAddress(ntdllBase, LdrLoadDllHash)
-			if loadLibraryWAddr != 0 && LdrLoadDllAddr != 0 {
+			if LdrLoadDllAddr != 0 {
 				return
 			}
 		}
 	}
-}
-
-func LoadLibraryW(name string) uintptr {
-	namePtr, _ := UTF16PtrFromString(name)
-
-	maxRetries := 5
-
-	for i := range maxRetries {
-		loadLibraryAddr := getLoadLibraryWAddr()
-		if loadLibraryAddr == 0 {
-			break
-		}
-
-		r1, _, _ := CallG0(loadLibraryAddr, namePtr)
-		if r1 != 0 {
-			return r1
-		}
-
-		if i < maxRetries-1 {
-			jitter := time.Duration((time.Now().UnixNano()>>uint(i%5))%7) * time.Millisecond
-			time.Sleep(time.Duration(50+i*50)*time.Millisecond + jitter)
-		}
-	}
-	// we should never get here :0
-	return 0
 }
 
 func LdrLoadDLL(name string) uintptr {
@@ -153,18 +123,13 @@ func LdrLoadDLL(name string) uintptr {
 	return 0
 }
 
-func LoadLibraryLdr(name string) uintptr {
+func LoadDll(name string) uintptr {
 	return LdrLoadDLL(name)
 }
 
 func getLdrLoadDllAddr() uintptr {
 	wincallOnce.Do(initAddresses)
 	return LdrLoadDllAddr
-}
-
-func getLoadLibraryWAddr() uintptr {
-	wincallOnce.Do(initAddresses)
-	return loadLibraryWAddr
 }
 
 func IsDebuggerPresent() bool {
@@ -322,31 +287,6 @@ func NewUnicodeString(s string) (*utils.UNICODE_STRING, *uint16, error) {
 
 	return us, utf16Ptr, nil
 }
-
-var gCallback libcall
-
-var gArgs [16]uintptr
-
-func SetCallbackN(fn uintptr, args ...uintptr) error {
-	if len(args) > len(gArgs) {
-		return errors.New(errors.Err0)
-	}
-	for i := range args {
-		gArgs[i] = args[i]
-	}
-	gCallback.fn = fn
-	gCallback.n = uintptr(len(args))
-	if len(args) > 0 {
-		gCallback.args = uintptr(unsafe.Pointer(&gArgs[0]))
-	} else {
-		gCallback.args = 0
-	}
-	return nil
-}
-
-var CallbackEntryPC uintptr
-
-func CallbackPtr() uintptr { return CallbackEntryPC }
 
 func processArg(arg interface{}) uintptr {
 	if arg == nil {
