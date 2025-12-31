@@ -11,6 +11,7 @@ import (
 	"github.com/carved4/go-wincall/pkg/wincall"
 )
 
+// x64 only
 func UnhookNtdll() {
 	ntdllBase := resolve.GetModuleBase(obf.GetHash("ntdll.dll"))
 	ldrGetKnownDllSectionHandle := resolve.GetFunctionAddress(ntdllBase, obf.GetHash("LdrGetKnownDllSectionHandle"))

@@ -1,6 +1,6 @@
 # go-wincall
 
-this project is an implementation of a windows api calling convention for go. it is an expansion of concepts from `carved4/go-native-syscall`. the library provides infrastructure to interact with the windows api without importing the `syscall` package or linking against windows libraries at compile time. it is focused on the low-level mechanics of api invocation and evasion.
+this project is an implementation of a windows api calling convention for go. it is an expansion of concepts from `carved4/go-native-syscall`. the library provides infrastructure to interact with the windows api without importing the `syscall` package or linking against windows libraries at compile time. it is focused on the low-level mechanics of api invocation and evasion. compatible with amd64 and arm64 windows builds
 
 ## demo
 ![output](https://github.com/user-attachments/assets/034b3151-d71d-48cd-a24a-c94fd4971a35)
@@ -20,7 +20,7 @@ calling certain windows dll functions through our plan9 asm stub can result in i
 
 ## solution: g0 system stack execution
 
-the library now executes api calls on the go runtime's system stack (g0) for the current os thread. the plan9 asm trampoline is invoked via `runtime.systemstack`, so windows `_chkstk` probes see a full native stack. there is no persistent worker thread, no shared memory, and no event signaling. arguments are prepared directly in go memory and marshaled per the windows x64 abi; results are returned directly to the caller.
+the library now executes api calls on the go runtime's system stack (g0) for the current os thread. the plan9 asm trampoline is invoked via `runtime.systemstack`, so windows `_chkstk` probes see a full native stack. there is no persistent worker thread, no shared memory, and no event signaling. arguments are prepared directly in go memory and marshaled per the windows amd64/arm64 abi; results are returned directly to the caller.
 
 ### technical details
 

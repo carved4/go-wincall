@@ -15,10 +15,6 @@ import (
 func main() {
 	fmt.Println("go-wincall demo :3")
 	runtime.LockOSThread()
-	wincall.UnhookNtdll()
-	if wincall.IsDebuggerPresent() {
-		os.Exit(1)
-	}
 	tidBefore := wincall.CurrentThreadIDFast()
 	var tidOnG0 uint32
 	wincall.RunOnG0(func() { tidOnG0 = wincall.CurrentThreadIDFast() })
