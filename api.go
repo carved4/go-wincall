@@ -98,6 +98,61 @@ func CallbackPtr() uintptr {
 	return wincall.CallbackPtr()
 }
 
+// NumCallbackSlots is the number of available callback slots
+const NumCallbackSlots = wincall.NumCallbackSlots
+
+// SetCallbackSlot configures a callback slot to call the specified function.
+// index: slot number (0-15)
+// fn: function address to call when this callback is invoked
+// args: arguments to pass to the function
+func SetCallbackSlot(index int, fn uintptr, args ...uintptr) error {
+	return wincall.SetCallbackSlot(index, fn, args...)
+}
+
+// GetCallbackSlotPtr returns the entry point address for a callback slot.
+// This address can be given to external code (like BOFs) to call back into Go.
+func GetCallbackSlotPtr(index int) uintptr {
+	return wincall.GetCallbackSlotPtr(index)
+}
+
+// GetCallbackSlotResult returns the result from the last call to a callback slot.
+func GetCallbackSlotResult(index int) (r1, r2 uintptr) {
+	return wincall.GetCallbackSlotResult(index)
+}
+
+// BOF Output Capture functions
+
+// SetBofOutputBuffer configures the output buffer for BOF execution.
+// The buffer must remain valid for the duration of BOF execution.
+func SetBofOutputBuffer(buf []byte) {
+	wincall.SetBofOutputBuffer(buf)
+}
+
+// GetBofOutputLen returns the number of bytes written to the output buffer.
+func GetBofOutputLen() int {
+	return wincall.GetBofOutputLen()
+}
+
+// ResetBofOutput resets the output buffer write position to 0.
+func ResetBofOutput() {
+	wincall.ResetBofOutput()
+}
+
+// GetBeaconOutputStubPtr returns the address of the BeaconOutput stub.
+func GetBeaconOutputStubPtr() uintptr {
+	return wincall.GetBeaconOutputStubPtr()
+}
+
+// GetBeaconPrintfStubPtr returns the address of the BeaconPrintf stub.
+func GetBeaconPrintfStubPtr() uintptr {
+	return wincall.GetBeaconPrintfStubPtr()
+}
+
+// GetGenericStubPtr returns the address of the generic stub (returns 0).
+func GetGenericStubPtr() uintptr {
+	return wincall.GetGenericStubPtr()
+}
+
 func UnhookNtdll() {
 	unhook.UnhookNtdll()
 }

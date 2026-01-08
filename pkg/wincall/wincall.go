@@ -313,6 +313,124 @@ func SetCallbackN(fn uintptr, args ...uintptr) error {
 
 func CallbackPtr() uintptr { return CallbackEntryPC }
 
+// Multi-callback slot system - 16 independent callback slots
+// Each slot can be configured to call a different function with different args
+
+const NumCallbackSlots = 16
+
+// gCallbackSlots holds 16 independent libcall structures
+// Each slot is 48 bytes (6 * 8 bytes for fn, n, args, r1, r2, err)
+var gCallbackSlots [NumCallbackSlots]libcall
+
+// gCallbackSlotArgs holds argument storage for each slot (16 args per slot)
+var gCallbackSlotArgs [NumCallbackSlots][16]uintptr
+
+// CallbackSlotPCs is populated by assembly with entry point addresses
+var CallbackSlotPCs [NumCallbackSlots]uintptr
+
+// SetCallbackSlot configures a callback slot to call the specified function
+// index: slot number (0-15)
+// fn: function address to call when this callback is invoked
+// args: arguments to pass to the function
+func SetCallbackSlot(index int, fn uintptr, args ...uintptr) error {
+	if index < 0 || index >= NumCallbackSlots {
+		return errors.New(errors.Err0)
+	}
+	if len(args) > 16 {
+		return errors.New(errors.Err0)
+	}
+
+	// Copy args to slot's arg storage
+	for i := range args {
+		gCallbackSlotArgs[index][i] = args[i]
+	}
+
+	gCallbackSlots[index].fn = fn
+	gCallbackSlots[index].n = uintptr(len(args))
+	if len(args) > 0 {
+		gCallbackSlots[index].args = uintptr(unsafe.Pointer(&gCallbackSlotArgs[index][0]))
+	} else {
+		gCallbackSlots[index].args = 0
+	}
+	return nil
+}
+
+// GetCallbackSlotPtr returns the entry point address for a callback slot
+// This address can be given to external code (like BOFs) to call back into Go
+func GetCallbackSlotPtr(index int) uintptr {
+	if index < 0 || index >= NumCallbackSlots {
+		return 0
+	}
+	return CallbackSlotPCs[index]
+}
+
+// GetCallbackSlotResult returns the result from the last call to a callback slot
+func GetCallbackSlotResult(index int) (r1, r2 uintptr) {
+	if index < 0 || index >= NumCallbackSlots {
+		return 0, 0
+	}
+	return gCallbackSlots[index].r1, gCallbackSlots[index].r2
+}
+
+// =============================================================================
+// BOF Output Capture
+// =============================================================================
+
+// gBofOutputState holds the state for BOF output capture
+// Layout matches what the assembly expects:
+//   +0:  bufPtr  (8 bytes) - pointer to output buffer
+//   +8:  bufSize (8 bytes) - total buffer capacity
+//   +16: bufLen  (8 bytes) - current write position
+var gBofOutputState struct {
+	bufPtr  uintptr
+	bufSize uintptr
+	bufLen  uintptr
+}
+
+// Stub entry point addresses (populated by assembly)
+var BeaconOutputStubPC uintptr
+var BeaconPrintfStubPC uintptr
+var GenericStubPC uintptr
+
+// SetBofOutputBuffer configures the output buffer for BOF execution
+// The buffer must remain valid for the duration of BOF execution
+func SetBofOutputBuffer(buf []byte) {
+	if len(buf) == 0 {
+		gBofOutputState.bufPtr = 0
+		gBofOutputState.bufSize = 0
+		gBofOutputState.bufLen = 0
+		return
+	}
+	gBofOutputState.bufPtr = uintptr(unsafe.Pointer(&buf[0]))
+	gBofOutputState.bufSize = uintptr(len(buf))
+	gBofOutputState.bufLen = 0
+}
+
+// GetBofOutputLen returns the number of bytes written to the output buffer
+func GetBofOutputLen() int {
+	return int(gBofOutputState.bufLen)
+}
+
+// ResetBofOutput resets the output buffer write position to 0
+func ResetBofOutput() {
+	gBofOutputState.bufLen = 0
+}
+
+// GetBeaconOutputStubPtr returns the address of the BeaconOutput stub
+func GetBeaconOutputStubPtr() uintptr {
+	return BeaconOutputStubPC
+}
+
+// GetBeaconPrintfStubPtr returns the address of the BeaconPrintf stub
+func GetBeaconPrintfStubPtr() uintptr {
+	return BeaconPrintfStubPC
+}
+
+// GetGenericStubPtr returns the address of the generic stub (returns 0)
+func GetGenericStubPtr() uintptr {
+	return GenericStubPC
+}
+
 func processArg(arg interface{}) uintptr {
 	if arg == nil {
 		return 0
