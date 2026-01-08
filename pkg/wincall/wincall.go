@@ -288,6 +288,31 @@ func NewUnicodeString(s string) (*utils.UNICODE_STRING, *uint16, error) {
 	return us, utf16Ptr, nil
 }
 
+var gCallback libcall
+
+var gArgs [16]uintptr
+
+var CallbackEntryPC uintptr
+
+func SetCallbackN(fn uintptr, args ...uintptr) error {
+	if len(args) > len(gArgs) {
+		return errors.New(errors.Err0)
+	}
+	for i := range args {
+		gArgs[i] = args[i]
+	}
+	gCallback.fn = fn
+	gCallback.n = uintptr(len(args))
+	if len(args) > 0 {
+		gCallback.args = uintptr(unsafe.Pointer(&gArgs[0]))
+	} else {
+		gCallback.args = 0
+	}
+	return nil
+}
+
+func CallbackPtr() uintptr { return CallbackEntryPC }
+
 func processArg(arg interface{}) uintptr {
 	if arg == nil {
 		return 0

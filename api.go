@@ -87,6 +87,17 @@ func UTF16ptr(s string) (*uint16, error) {
 	return ptr, err
 }
 
+// SetCallbackN configures the callback target and its arguments for foreign callers.
+// Up to 16 arguments are supported; additional args will return an error.
+func SetCallbackN(fn uintptr, args ...uintptr) error {
+	return wincall.SetCallbackN(fn, args...)
+}
+
+// CallbackPtr returns the raw code pointer to CallbackEntry for foreign callers.
+func CallbackPtr() uintptr {
+	return wincall.CallbackPtr()
+}
+
 func UnhookNtdll() {
 	unhook.UnhookNtdll()
 }
