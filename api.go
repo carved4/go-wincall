@@ -87,70 +87,43 @@ func UTF16ptr(s string) (*uint16, error) {
 	return ptr, err
 }
 
-// SetCallbackN configures the callback target and its arguments for foreign callers.
-// Up to 16 arguments are supported; additional args will return an error.
-func SetCallbackN(fn uintptr, args ...uintptr) error {
-	return wincall.SetCallbackN(fn, args...)
+// =============================================================================
+// callback system - windows x64 -> go abi bridge
+// =============================================================================
+
+// MaxCallbackSlots is the number of available callback slots
+const MaxCallbackSlots = wincall.MaxCallbackSlots
+
+// CallbackFunc is the signature for callback handlers
+// args points to the spilled windows x64 args (arg0 at offset 0, arg1 at offset 8, etc.)
+type CallbackFunc = wincall.CallbackFunc
+
+// NewCallback registers a callback handler and returns the trampoline address.
+// the returned address can be given to native code (e.g., BOFs) to call back into go.
+func NewCallback(handler CallbackFunc) uintptr {
+	return wincall.NewCallback(handler)
 }
 
-// CallbackPtr returns the raw code pointer to CallbackEntry for foreign callers.
-func CallbackPtr() uintptr {
-	return wincall.CallbackPtr()
+// RegisterCallback registers a handler at a specific slot.
+// returns the trampoline address for that slot.
+func RegisterCallback(slot int, handler CallbackFunc) uintptr {
+	return wincall.RegisterCallback(slot, handler)
 }
 
-// NumCallbackSlots is the number of available callback slots
-const NumCallbackSlots = wincall.NumCallbackSlots
-
-// SetCallbackSlot configures a callback slot to call the specified function.
-// index: slot number (0-15)
-// fn: function address to call when this callback is invoked
-// args: arguments to pass to the function
-func SetCallbackSlot(index int, fn uintptr, args ...uintptr) error {
-	return wincall.SetCallbackSlot(index, fn, args...)
+// GetCallbackAddr returns the trampoline address for a callback slot.
+func GetCallbackAddr(slot int) uintptr {
+	return wincall.GetCallbackAddr(slot)
 }
 
-// GetCallbackSlotPtr returns the entry point address for a callback slot.
-// This address can be given to external code (like BOFs) to call back into Go.
-func GetCallbackSlotPtr(index int) uintptr {
-	return wincall.GetCallbackSlotPtr(index)
+// ClearCallback removes the handler for a callback slot.
+func ClearCallback(slot int) {
+	wincall.ClearCallback(slot)
 }
 
-// GetCallbackSlotResult returns the result from the last call to a callback slot.
-func GetCallbackSlotResult(index int) (r1, r2 uintptr) {
-	return wincall.GetCallbackSlotResult(index)
-}
-
-// BOF Output Capture functions
-
-// SetBofOutputBuffer configures the output buffer for BOF execution.
-// The buffer must remain valid for the duration of BOF execution.
-func SetBofOutputBuffer(buf []byte) {
-	wincall.SetBofOutputBuffer(buf)
-}
-
-// GetBofOutputLen returns the number of bytes written to the output buffer.
-func GetBofOutputLen() int {
-	return wincall.GetBofOutputLen()
-}
-
-// ResetBofOutput resets the output buffer write position to 0.
-func ResetBofOutput() {
-	wincall.ResetBofOutput()
-}
-
-// GetBeaconOutputStubPtr returns the address of the BeaconOutput stub.
-func GetBeaconOutputStubPtr() uintptr {
-	return wincall.GetBeaconOutputStubPtr()
-}
-
-// GetBeaconPrintfStubPtr returns the address of the BeaconPrintf stub.
-func GetBeaconPrintfStubPtr() uintptr {
-	return wincall.GetBeaconPrintfStubPtr()
-}
-
-// GetGenericStubPtr returns the address of the generic stub (returns 0).
-func GetGenericStubPtr() uintptr {
-	return wincall.GetGenericStubPtr()
+// CallbackArg reads argument N from the args pointer.
+// for windows x64: args 0-3 were in registers (RCX,RDX,R8,R9), args 4+ from stack.
+func CallbackArg(args unsafe.Pointer, n int) uintptr {
+	return wincall.CallbackArg(args, n)
 }
 
 func UnhookNtdll() {

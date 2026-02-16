@@ -288,147 +288,118 @@ func NewUnicodeString(s string) (*utils.UNICODE_STRING, *uint16, error) {
 	return us, utf16Ptr, nil
 }
 
-var gCallback libcall
-
-var gArgs [16]uintptr
-
-var CallbackEntryPC uintptr
-
-func SetCallbackN(fn uintptr, args ...uintptr) error {
-	if len(args) > len(gArgs) {
-		return errors.New(errors.Err0)
-	}
-	for i := range args {
-		gArgs[i] = args[i]
-	}
-	gCallback.fn = fn
-	gCallback.n = uintptr(len(args))
-	if len(args) > 0 {
-		gCallback.args = uintptr(unsafe.Pointer(&gArgs[0]))
-	} else {
-		gCallback.args = 0
-	}
-	return nil
-}
-
-func CallbackPtr() uintptr { return CallbackEntryPC }
-
-// Multi-callback slot system - 16 independent callback slots
-// Each slot can be configured to call a different function with different args
-
-const NumCallbackSlots = 16
-
-// gCallbackSlots holds 16 independent libcall structures
-// Each slot is 48 bytes (6 * 8 bytes for fn, n, args, r1, r2, err)
-var gCallbackSlots [NumCallbackSlots]libcall
-
-// gCallbackSlotArgs holds argument storage for each slot (16 args per slot)
-var gCallbackSlotArgs [NumCallbackSlots][16]uintptr
-
-// CallbackSlotPCs is populated by assembly with entry point addresses
-var CallbackSlotPCs [NumCallbackSlots]uintptr
-
-// SetCallbackSlot configures a callback slot to call the specified function
-// index: slot number (0-15)
-// fn: function address to call when this callback is invoked
-// args: arguments to pass to the function
-func SetCallbackSlot(index int, fn uintptr, args ...uintptr) error {
-	if index < 0 || index >= NumCallbackSlots {
-		return errors.New(errors.Err0)
-	}
-	if len(args) > 16 {
-		return errors.New(errors.Err0)
-	}
-
-	// Copy args to slot's arg storage
-	for i := range args {
-		gCallbackSlotArgs[index][i] = args[i]
-	}
-
-	gCallbackSlots[index].fn = fn
-	gCallbackSlots[index].n = uintptr(len(args))
-	if len(args) > 0 {
-		gCallbackSlots[index].args = uintptr(unsafe.Pointer(&gCallbackSlotArgs[index][0]))
-	} else {
-		gCallbackSlots[index].args = 0
-	}
-	return nil
-}
-
-// GetCallbackSlotPtr returns the entry point address for a callback slot
-// This address can be given to external code (like BOFs) to call back into Go
-func GetCallbackSlotPtr(index int) uintptr {
-	if index < 0 || index >= NumCallbackSlots {
-		return 0
-	}
-	return CallbackSlotPCs[index]
-}
-
-// GetCallbackSlotResult returns the result from the last call to a callback slot
-func GetCallbackSlotResult(index int) (r1, r2 uintptr) {
-	if index < 0 || index >= NumCallbackSlots {
-		return 0, 0
-	}
-	return gCallbackSlots[index].r1, gCallbackSlots[index].r2
-}
-
 // =============================================================================
-// BOF Output Capture
+// callback system - windows x64 -> go abi bridge
+// =============================================================================
+// reentrant callback trampolines modeled after runtime/syscall_windows.go
+// each callback slot has an assembly entry point that:
+// 1. spills windows x64 register args to shadow space
+// 2. builds callbackArgs and calls callbackWrap
+// 3. returns result to caller
+//
+// args pointer points to spilled shadow space on caller's stack - no copying,
+// fully reentrant since each call has its own stack frame.
 // =============================================================================
 
-// gBofOutputState holds the state for BOF output capture
-// Layout matches what the assembly expects:
-//   +0:  bufPtr  (8 bytes) - pointer to output buffer
-//   +8:  bufSize (8 bytes) - total buffer capacity
-//   +16: bufLen  (8 bytes) - current write position
-var gBofOutputState struct {
-	bufPtr  uintptr
-	bufSize uintptr
-	bufLen  uintptr
+// MaxCallbackSlots is the number of available callback slots
+const MaxCallbackSlots = 48
+
+// callbackArgs is passed from assembly to callbackWrap
+// layout must match assembly expectations
+type callbackArgs struct {
+	index  uintptr        // callback slot index
+	args   unsafe.Pointer // pointer to spilled args in shadow space
+	result uintptr        // return value (set by callbackWrap)
 }
 
-// Stub entry point addresses (populated by assembly)
-var BeaconOutputStubPC uintptr
-var BeaconPrintfStubPC uintptr
-var GenericStubPC uintptr
+// CallbackFunc is the signature for callback handlers
+// args points to the spilled windows x64 args:
+//
+//	args[0] = arg0 (was RCX)
+//	args[1] = arg1 (was RDX)
+//	args[2] = arg2 (was R8)
+//	args[3] = arg3 (was R9)
+//	args[4] = arg4 (stack)
+//	args[5] = arg5 (stack)
+//	...
+type CallbackFunc func(args unsafe.Pointer) uintptr
 
-// SetBofOutputBuffer configures the output buffer for BOF execution
-// The buffer must remain valid for the duration of BOF execution
-func SetBofOutputBuffer(buf []byte) {
-	if len(buf) == 0 {
-		gBofOutputState.bufPtr = 0
-		gBofOutputState.bufSize = 0
-		gBofOutputState.bufLen = 0
+// callbacks stores registered callback handlers
+var callbacks struct {
+	handlers [MaxCallbackSlots]CallbackFunc
+	n        int // number of registered callbacks
+}
+
+// callbackasmPCs holds assembly trampoline addresses (populated by assembly)
+var callbackasmPCs [MaxCallbackSlots]uintptr
+
+// callbackWrap is called by assembly to dispatch to the registered handler
+// this is the go abi entry point called from callbackasm_common
+//
+//go:nosplit
+func callbackWrap(a *callbackArgs) {
+	if a.index >= MaxCallbackSlots {
+		a.result = 0
 		return
 	}
-	gBofOutputState.bufPtr = uintptr(unsafe.Pointer(&buf[0]))
-	gBofOutputState.bufSize = uintptr(len(buf))
-	gBofOutputState.bufLen = 0
+	handler := callbacks.handlers[a.index]
+	if handler == nil {
+		a.result = 0
+		return
+	}
+	a.result = handler(a.args)
 }
 
-// GetBofOutputLen returns the number of bytes written to the output buffer
-func GetBofOutputLen() int {
-	return int(gBofOutputState.bufLen)
+// NewCallback registers a callback handler and returns the trampoline address
+// the returned address can be given to native code (e.g., BOFs) to call back into go
+func NewCallback(handler CallbackFunc) uintptr {
+	if handler == nil {
+		return 0
+	}
+	if callbacks.n >= MaxCallbackSlots {
+		panic("too many callbacks")
+	}
+	slot := callbacks.n
+	callbacks.handlers[slot] = handler
+	callbacks.n++
+	return callbackasmPCs[slot]
 }
 
-// ResetBofOutput resets the output buffer write position to 0
-func ResetBofOutput() {
-	gBofOutputState.bufLen = 0
+// RegisterCallback registers a handler at a specific slot
+// returns the trampoline address for that slot
+func RegisterCallback(slot int, handler CallbackFunc) uintptr {
+	if slot < 0 || slot >= MaxCallbackSlots {
+		return 0
+	}
+	callbacks.handlers[slot] = handler
+	if slot >= callbacks.n {
+		callbacks.n = slot + 1
+	}
+	return callbackasmPCs[slot]
 }
 
-// GetBeaconOutputStubPtr returns the address of the BeaconOutput stub
-func GetBeaconOutputStubPtr() uintptr {
-	return BeaconOutputStubPC
+// GetCallbackAddr returns the trampoline address for a callback slot
+func GetCallbackAddr(slot int) uintptr {
+	if slot < 0 || slot >= MaxCallbackSlots {
+		return 0
+	}
+	return callbackasmPCs[slot]
 }
 
-// GetBeaconPrintfStubPtr returns the address of the BeaconPrintf stub
-func GetBeaconPrintfStubPtr() uintptr {
-	return BeaconPrintfStubPC
+// ClearCallback removes the handler for a callback slot
+func ClearCallback(slot int) {
+	if slot < 0 || slot >= MaxCallbackSlots {
+		return
+	}
+	callbacks.handlers[slot] = nil
 }
 
-// GetGenericStubPtr returns the address of the generic stub (returns 0)
-func GetGenericStubPtr() uintptr {
-	return GenericStubPC
+// CallbackArg reads argument N from the args pointer
+// for windows x64: args 0-3 were in registers (RCX,RDX,R8,R9), args 4+ from stack
+//
+//go:nosplit
+func CallbackArg(args unsafe.Pointer, n int) uintptr {
+	return *(*uintptr)(unsafe.Pointer(uintptr(args) + uintptr(n)*8))
 }
 
 func processArg(arg interface{}) uintptr {
