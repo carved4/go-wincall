@@ -302,7 +302,7 @@ func NewUnicodeString(s string) (*utils.UNICODE_STRING, *uint16, error) {
 // =============================================================================
 
 // MaxCallbackSlots is the number of available callback slots
-const MaxCallbackSlots = 55
+const MaxCallbackSlots = 60
 
 // callbackArgs is passed from assembly to callbackWrap
 // layout must match assembly expectations

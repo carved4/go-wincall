@@ -433,12 +433,28 @@ TEXT ·callbackasm55(SB),NOSPLIT,$0-0
     MOVQ $55, AX
     JMP callbackasm_common(SB)
 
+TEXT ·callbackasm56(SB),NOSPLIT,$0-0
+    MOVQ $56, AX
+    JMP callbackasm_common(SB)
+
+TEXT ·callbackasm57(SB),NOSPLIT,$0-0
+    MOVQ $57, AX
+    JMP callbackasm_common(SB)
+
+TEXT ·callbackasm58(SB),NOSPLIT,$0-0
+    MOVQ $58, AX
+    JMP callbackasm_common(SB)
+
+TEXT ·callbackasm59(SB),NOSPLIT,$0-0
+    MOVQ $59, AX
+    JMP callbackasm_common(SB)
 
 
 
 
-// export callback entry point addresses (55 slots)
-GLOBL ·callbackasmPCs(SB), RODATA, $384
+
+// export callback entry point addresses (60 slots)
+GLOBL ·callbackasmPCs(SB), RODATA, $480
 DATA ·callbackasmPCs+0(SB)/8, $·callbackasm0(SB)
 DATA ·callbackasmPCs+8(SB)/8, $·callbackasm1(SB)
 DATA ·callbackasmPCs+16(SB)/8, $·callbackasm2(SB)
@@ -486,12 +502,16 @@ DATA ·callbackasmPCs+344(SB)/8, $·callbackasm43(SB)
 DATA ·callbackasmPCs+352(SB)/8, $·callbackasm44(SB)
 DATA ·callbackasmPCs+360(SB)/8, $·callbackasm45(SB)
 DATA ·callbackasmPCs+368(SB)/8, $·callbackasm46(SB)
-DATA ·callbackasmPCs+384(SB)/8, $·callbackasm47(SB)
-DATA ·callbackasmPCs+392(SB)/8, $·callbackasm48(SB)
-DATA ·callbackasmPCs+400(SB)/8, $·callbackasm49(SB)
-DATA ·callbackasmPCs+408(SB)/8, $·callbackasm50(SB)
-DATA ·callbackasmPCs+416(SB)/8, $·callbackasm51(SB)
-DATA ·callbackasmPCs+424(SB)/8, $·callbackasm52(SB)
-DATA ·callbackasmPCs+432(SB)/8, $·callbackasm53(SB)
-DATA ·callbackasmPCs+440(SB)/8, $·callbackasm54(SB)
-DATA ·callbackasmPCs+448(SB)/8, $·callbackasm55(SB)
+DATA ·callbackasmPCs+376(SB)/8, $·callbackasm47(SB)
+DATA ·callbackasmPCs+384(SB)/8, $·callbackasm48(SB)
+DATA ·callbackasmPCs+392(SB)/8, $·callbackasm49(SB)
+DATA ·callbackasmPCs+400(SB)/8, $·callbackasm50(SB)
+DATA ·callbackasmPCs+408(SB)/8, $·callbackasm51(SB)
+DATA ·callbackasmPCs+416(SB)/8, $·callbackasm52(SB)
+DATA ·callbackasmPCs+424(SB)/8, $·callbackasm53(SB)
+DATA ·callbackasmPCs+432(SB)/8, $·callbackasm54(SB)
+DATA ·callbackasmPCs+440(SB)/8, $·callbackasm55(SB)
+DATA ·callbackasmPCs+448(SB)/8, $·callbackasm56(SB)
+DATA ·callbackasmPCs+456(SB)/8, $·callbackasm57(SB)
+DATA ·callbackasmPCs+464(SB)/8, $·callbackasm58(SB)
+DATA ·callbackasmPCs+472(SB)/8, $·callbackasm59(SB)
