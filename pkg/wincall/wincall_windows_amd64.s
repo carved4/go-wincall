@@ -401,7 +401,43 @@ TEXT ·callbackasm47(SB),NOSPLIT,$0-0
     MOVQ $47, AX
     JMP callbackasm_common(SB)
 
-// export callback entry point addresses (48 slots)
+TEXT ·callbackasm48(SB),NOSPLIT,$0-0
+    MOVQ $48, AX
+    JMP callbackasm_common(SB)
+
+TEXT ·callbackasm49(SB),NOSPLIT,$0-0
+    MOVQ $49, AX
+    JMP callbackasm_common(SB)
+
+TEXT ·callbackasm50(SB),NOSPLIT,$0-0
+    MOVQ $50, AX
+    JMP callbackasm_common(SB)
+
+TEXT ·callbackasm51(SB),NOSPLIT,$0-0
+    MOVQ $51, AX
+    JMP callbackasm_common(SB)
+
+TEXT ·callbackasm52(SB),NOSPLIT,$0-0
+    MOVQ $52, AX
+    JMP callbackasm_common(SB)
+
+TEXT ·callbackasm53(SB),NOSPLIT,$0-0
+    MOVQ $53, AX
+    JMP callbackasm_common(SB)
+
+TEXT ·callbackasm54(SB),NOSPLIT,$0-0
+    MOVQ $54, AX
+    JMP callbackasm_common(SB)
+
+TEXT ·callbackasm55(SB),NOSPLIT,$0-0
+    MOVQ $55, AX
+    JMP callbackasm_common(SB)
+
+
+
+
+
+// export callback entry point addresses (55 slots)
 GLOBL ·callbackasmPCs(SB), RODATA, $384
 DATA ·callbackasmPCs+0(SB)/8, $·callbackasm0(SB)
 DATA ·callbackasmPCs+8(SB)/8, $·callbackasm1(SB)
@@ -450,5 +486,12 @@ DATA ·callbackasmPCs+344(SB)/8, $·callbackasm43(SB)
 DATA ·callbackasmPCs+352(SB)/8, $·callbackasm44(SB)
 DATA ·callbackasmPCs+360(SB)/8, $·callbackasm45(SB)
 DATA ·callbackasmPCs+368(SB)/8, $·callbackasm46(SB)
-DATA ·callbackasmPCs+376(SB)/8, $·callbackasm47(SB)
-
+DATA ·callbackasmPCs+384(SB)/8, $·callbackasm47(SB)
+DATA ·callbackasmPCs+392(SB)/8, $·callbackasm48(SB)
+DATA ·callbackasmPCs+400(SB)/8, $·callbackasm49(SB)
+DATA ·callbackasmPCs+408(SB)/8, $·callbackasm50(SB)
+DATA ·callbackasmPCs+416(SB)/8, $·callbackasm51(SB)
+DATA ·callbackasmPCs+424(SB)/8, $·callbackasm52(SB)
+DATA ·callbackasmPCs+432(SB)/8, $·callbackasm53(SB)
+DATA ·callbackasmPCs+440(SB)/8, $·callbackasm54(SB)
+DATA ·callbackasmPCs+448(SB)/8, $·callbackasm55(SB)
