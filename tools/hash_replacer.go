@@ -32,6 +32,7 @@ func processFile(path string, dryRun bool) error {
 	modified := original
 	pattern := regexp.MustCompile(`(\w+\.)?GetHash\("([^"]+)"\)`)
 
+	stats.filesScanned++
 	matches := pattern.FindAllStringSubmatch(original, -1)
 	if len(matches) == 0 {
 		return nil
@@ -58,28 +59,53 @@ func processFile(path string, dryRun bool) error {
 		modified = strings.ReplaceAll(modified, old, new)
 	}
 
-	if !dryRun && modified != original {
-		return os.WriteFile(path, []byte(modified), 0644)
+	stats.replacements += len(replacements)
+	if modified != original {
+		stats.filesModified++
+		if !dryRun {
+			return os.WriteFile(path, []byte(modified), 0644)
+		}
 	}
 
 	return nil
 }
 
-func main() {
-	dryRun := false
+func usage() {
+	fmt.Fprintf(os.Stderr, "Usage: go run hash_replacer.go [--dry-run] <project-path>\n")
+	os.Exit(1)
+}
 
-	if len(os.Args) > 1 && os.Args[1] == "--dry-run" {
-		dryRun = true
+var stats struct {
+	filesScanned  int
+	filesModified int
+	replacements  int
+}
+
+func main() {
+	var dryRun bool
+	var root string
+
+	args := os.Args[1:]
+	for _, a := range args {
+		switch {
+		case a == "--dry-run":
+			dryRun = true
+		case strings.HasPrefix(a, "-"):
+			usage()
+		default:
+			if root != "" {
+				usage()
+			}
+			root = a
+		}
+	}
+	if root == "" {
+		usage()
+	}
+
+	if dryRun {
 		fmt.Println("DRY RUN MODE - No files will be modified")
 	}
-
-	root := ".."
-	if len(os.Args) > 2 {
-		root = os.Args[2]
-	} else if len(os.Args) > 1 && os.Args[1] != "--dry-run" {
-		root = os.Args[1]
-	}
-
 	fmt.Printf("Scanning directory: %s\n", root)
 
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
@@ -89,7 +115,7 @@ func main() {
 		if info.IsDir() || !strings.HasSuffix(path, ".go") {
 			return nil
 		}
-		if strings.Contains(path, "tools") || strings.HasSuffix(path, "_test.go") {
+		if strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
 
@@ -101,9 +127,10 @@ func main() {
 		os.Exit(1)
 	}
 
+	fmt.Printf("\nScanned %d files, %d replacements in %d files.\n", stats.filesScanned, stats.replacements, stats.filesModified)
 	if dryRun {
-		fmt.Println("\nDry run complete. Run without --dry-run to apply changes.")
+		fmt.Println("Dry run complete. Run without --dry-run to apply changes.")
 	} else {
-		fmt.Println("\nHash replacement complete!")
+		fmt.Println("Done.")
 	}
 }

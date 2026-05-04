@@ -33,7 +33,7 @@ before building your binary, run the included hash_replacer tool to remove strin
 cd tools
 # change hashing algorithm in obf.go to anything you please, or keep it the same
 # update hash_replacer.go hash func to match
-go run hash_replacer.go
+go run hash_replacer.go <path_to_your_project> --dry-run # to see what will be changed, then run without to perform changes
 ```
 after building your binary, run the included strip script to remove github.com import strings (requires bash/WSL on windows):
 ```bash
