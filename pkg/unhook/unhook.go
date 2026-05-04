@@ -1,7 +1,6 @@
 package unhook
 
 import (
-	"fmt"
 	"unsafe"
 
 	"github.com/carved4/go-wincall/pkg/obf"
@@ -47,6 +46,9 @@ func UnhookNtdll() {
 		0,
 		0x20,
 	)
+	if ret != 0 || baseAddress == 0 {
+		return
+	}
 	dosHeader := (*utils.IMAGE_DOS_HEADER)(unsafe.Pointer(ntdllBase))
 	sizeOfCodeAddr := ntdllBase + uintptr(dosHeader.E_lfanew) + 0x18 + 0x14
 	sizeOfCode := *(*uint32)(unsafe.Pointer(sizeOfCodeAddr))
@@ -67,7 +69,7 @@ func UnhookNtdll() {
 		uintptr(unsafe.Pointer(&oldProt)),
 	)
 	if ret != 0 {
-		fmt.Printf("failed with 0x%x\n", ret)
+		return
 	}
 	memcpy(currNtdllTextAddr, knownDllsTextAddr, uintptr(sizeOfCode))
 	protectBase = base
@@ -111,6 +113,8 @@ func UnhookNtdll() {
 	if ret != 0 {
 		return
 	}
+
+	resolve.ClearResolveCaches()
 }
 
 func memcpy(dst, src uintptr, size uintptr) {

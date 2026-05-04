@@ -4,9 +4,9 @@ import "fmt"
 
 // error codes :3
 const (
-	Err0 = 0
-	Err1 = 1
-	Err2 = 2
+	ErrModuleNotFound   = 1
+	ErrFunctionNotFound = 2
+	ErrUnsupportedArg   = 3
 )
 
 type WinCallError struct {
@@ -14,7 +14,16 @@ type WinCallError struct {
 }
 
 func (e *WinCallError) Error() string {
-	return fmt.Sprintf("%d", e.Code)
+	switch e.Code {
+	case ErrModuleNotFound:
+		return "wincall: module not found"
+	case ErrFunctionNotFound:
+		return "wincall: function not found"
+	case ErrUnsupportedArg:
+		return "wincall: unsupported argument type"
+	default:
+		return fmt.Sprintf("wincall: error %d", e.Code)
+	}
 }
 
 // New creates a new WinCallError

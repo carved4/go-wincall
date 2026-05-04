@@ -53,9 +53,6 @@ func DirectCall(funcAddr uintptr, args ...any) (uintptr, uintptr, error) {
 		wincall(lc)
 	})
 	runtime.KeepAlive(args)
-	for i := range processedArgs {
-		processedArgs[i] = 0
-	}
 	return lc.r1, lc.r2, nil
 }
 
@@ -327,8 +324,10 @@ type CallbackFunc func(args unsafe.Pointer) uintptr
 // callbacks stores registered callback handlers
 var callbacks struct {
 	handlers [MaxCallbackSlots]CallbackFunc
-	n        int // number of registered callbacks
+	n        int
 }
+
+var callbackMu sync.Mutex
 
 // callbackasmPCs holds assembly trampoline addresses (populated by assembly)
 var callbackasmPCs [MaxCallbackSlots]uintptr
@@ -356,6 +355,8 @@ func NewCallback(handler CallbackFunc) uintptr {
 	if handler == nil {
 		return 0
 	}
+	callbackMu.Lock()
+	defer callbackMu.Unlock()
 	if callbacks.n >= MaxCallbackSlots {
 		panic("too many callbacks")
 	}
@@ -371,10 +372,12 @@ func RegisterCallback(slot int, handler CallbackFunc) uintptr {
 	if slot < 0 || slot >= MaxCallbackSlots {
 		return 0
 	}
+	callbackMu.Lock()
 	callbacks.handlers[slot] = handler
 	if slot >= callbacks.n {
 		callbacks.n = slot + 1
 	}
+	callbackMu.Unlock()
 	return callbackasmPCs[slot]
 }
 
@@ -391,7 +394,9 @@ func ClearCallback(slot int) {
 	if slot < 0 || slot >= MaxCallbackSlots {
 		return
 	}
+	callbackMu.Lock()
 	callbacks.handlers[slot] = nil
+	callbackMu.Unlock()
 }
 
 // CallbackArg reads argument N from the args pointer
@@ -463,5 +468,5 @@ func processArg(arg interface{}) uintptr {
 		}
 		return 0
 	}
-	panic(errors.New(errors.Err1))
+	panic(errors.New(errors.ErrUnsupportedArg))
 }

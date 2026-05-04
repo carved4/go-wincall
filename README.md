@@ -31,12 +31,11 @@ the framework avoids high-level windows apis for its setup and execution. module
 before building your binary, run the included hash_replacer tool to remove string literals from GetHash() calls
 ```bash
 cd tools
-// change hashing algorithm in obf.go to anything you please, or keep it the same
-// update hash_replacer.go hash func to match
+# change hashing algorithm in obf.go to anything you please, or keep it the same
+# update hash_replacer.go hash func to match
 go run hash_replacer.go
-
 ```
-after building your binary, run the included strip script to remove github.com import strings:
+after building your binary, run the included strip script to remove github.com import strings (requires bash/WSL on windows):
 ```bash
 ./strip.sh your_binary.exe
 ```
@@ -88,6 +87,8 @@ r1, r2, err := wincall.CallG0(
 	uintptr(unsafe.Pointer(title)),
 	0, // MB_OK
 )
+runtime.KeepAlive(title)
+runtime.KeepAlive(message)
 ```
 
 ### return value decoding utilities
@@ -129,7 +130,7 @@ runtime.KeepAlive(message)
 ### available functions
 
 #### core api functions
-- `Call(dllName, funcName interface{}, args ...interface{}) (uintptr, uintptr, error)` - high-level api call
+- `Call(dllName, funcName string, args ...interface{}) (uintptr, uintptr, error)` - high-level api call
 - `CallG0(funcAddr uintptr, args ...any) (uintptr, uintptr, error)` - execute function on g0 (system stack)
 - `LoadLibrary(name string) uintptr` - load dll with ldrloaddll and return base address
 - `UTF16ptr(s string) (*uint16, error)` - convert go string to utf-16 pointer
@@ -140,6 +141,14 @@ runtime.KeepAlive(message)
 - `CurrentThreadIDFast() uint32` - get current thread ID from TEB
 - `RunOnG0(f func())` - run function on g0 system stack
 - `ClearCache()` - clear all internal caches
+- `UTF16ToString(ptr *uint16) string` - convert utf-16 pointer to go string
+
+#### callback functions
+- `NewCallback(handler CallbackFunc) uintptr` - register callback handler and return trampoline address
+- `RegisterCallback(slot int, handler CallbackFunc) uintptr` - register handler at specific slot
+- `GetCallbackAddr(slot int) uintptr` - get trampoline address for a callback slot
+- `ClearCallback(slot int)` - remove handler for a callback slot
+- `CallbackArg(args unsafe.Pointer, n int) uintptr` - read argument N from callback args pointer
 
 #### syscall functions
 - `Syscall(syscallNum uint32, args ...uintptr) (uintptr, error)` - direct system call
@@ -181,7 +190,7 @@ if syscallInfo.Address != 0 {
     )
     
     // or direct syscall
-    result, err := wincall.Syscall(syscallInfo.SSN,
+    result, err = wincall.Syscall(syscallInfo.SSN,
         processHandle,
         uintptr(unsafe.Pointer(&baseAddress)),
         zeroBits,

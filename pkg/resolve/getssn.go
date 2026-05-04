@@ -2,7 +2,7 @@ package resolve
 
 import (
 	"sort"
-	"strings"
+	"sync"
 	"unsafe"
 
 	"github.com/carved4/go-wincall/pkg/obf"
@@ -13,26 +13,32 @@ type Syscall struct {
 	SSN     uint32
 }
 
-func GetSyscall(hash uint32) Syscall {
+var (
+	syscallTable      map[uint32]Syscall
+	syscallTableMu    sync.RWMutex
+	syscallTableBuilt bool
+)
+
+func buildSyscallTable() {
 	moduleBase := GetModuleBase(obf.GetHash("ntdll.dll"))
 	if moduleBase == 0 {
-		return Syscall{}
+		return
 	}
 	dosHeader := (*[64]byte)(unsafe.Pointer(moduleBase))
 	if dosHeader[0] != 'M' || dosHeader[1] != 'Z' {
-		return Syscall{}
+		return
 	}
 	peOffset := *(*uint32)(unsafe.Pointer(moduleBase + 60))
 	if peOffset >= 1024 {
-		return Syscall{}
+		return
 	}
 	peHeader := (*[1024]byte)(unsafe.Pointer(moduleBase + uintptr(peOffset)))
 	if peHeader[0] != 'P' || peHeader[1] != 'E' {
-		return Syscall{}
+		return
 	}
 	exportDirRVA := *(*uint32)(unsafe.Pointer(moduleBase + uintptr(peOffset) + 0x88))
 	if exportDirRVA == 0 {
-		return Syscall{}
+		return
 	}
 	exportDir := moduleBase + uintptr(exportDirRVA)
 
@@ -43,62 +49,76 @@ func GetSyscall(hash uint32) Syscall {
 	functionsAddr := moduleBase + uintptr(functionsRVA)
 	namesAddr := moduleBase + uintptr(namesRVA)
 	ordinalsAddr := moduleBase + uintptr(ordinalsRVA)
-	syscalls := make([]Syscall, 0, numberOfNames)
-	var targetAddr uintptr
+
+	type ntFunc struct {
+		hash uint32
+		addr uintptr
+	}
+	funcs := make([]ntFunc, 0, numberOfNames)
 
 	for i := uint32(0); i < numberOfNames; i++ {
 		nameRVA := *(*uint32)(unsafe.Pointer(namesAddr + uintptr(i*4)))
 		nameAddr := moduleBase + uintptr(nameRVA)
-		nameString := cString(nameAddr)
 
-		nameHash := obf.GetHash(nameString)
-
-		if strings.HasPrefix(nameString, "Nt") && !strings.HasPrefix(nameString, "Ntdll") {
-			ordinal := *(*uint16)(unsafe.Pointer(ordinalsAddr + uintptr(i*2)))
-			funcRVA := *(*uint32)(unsafe.Pointer(functionsAddr + uintptr(ordinal*4)))
-			funcAddr := moduleBase + uintptr(funcRVA)
-
-			syscalls = append(syscalls, Syscall{
-				Address: funcAddr,
-			})
-
-			if nameHash == hash {
-				targetAddr = funcAddr
-			}
+		b0 := *(*byte)(unsafe.Pointer(nameAddr))
+		b1 := *(*byte)(unsafe.Pointer(nameAddr + 1))
+		if b0 != 'N' || b1 != 't' {
+			continue
 		}
+		b2 := *(*byte)(unsafe.Pointer(nameAddr + 2))
+		b3 := *(*byte)(unsafe.Pointer(nameAddr + 3))
+		b4 := *(*byte)(unsafe.Pointer(nameAddr + 4))
+		if b2 == 'd' && b3 == 'l' && b4 == 'l' {
+			continue
+		}
+
+		ordinal := *(*uint16)(unsafe.Pointer(ordinalsAddr + uintptr(i*2)))
+		funcRVA := *(*uint32)(unsafe.Pointer(functionsAddr + uintptr(ordinal*4)))
+		funcAddr := moduleBase + uintptr(funcRVA)
+
+		funcs = append(funcs, ntFunc{
+			hash: obf.HashFromCString(nameAddr),
+			addr: funcAddr,
+		})
 	}
-	if targetAddr == 0 {
-		return Syscall{}
-	}
+
 	// sorting them gives us the ssns, thanks windows :p
 	// anti hook stuff is in GetTrampoline asm implementation, thanks acheron
-	sort.Slice(syscalls, func(i, j int) bool {
-		return syscalls[i].Address < syscalls[j].Address
+	sort.Slice(funcs, func(i, j int) bool {
+		return funcs[i].addr < funcs[j].addr
 	})
 
-	for i, sc := range syscalls {
-		if sc.Address == targetAddr {
-			return Syscall{
-				Address: targetAddr,
-				SSN:     uint32(i),
-			}
+	syscallTable = make(map[uint32]Syscall, len(funcs))
+	for i, f := range funcs {
+		syscallTable[f.hash] = Syscall{
+			Address: f.addr,
+			SSN:     uint32(i),
 		}
 	}
-
-	return Syscall{}
 }
 
-func cString(addr uintptr) string {
-	if addr == 0 {
-		return ""
+func clearSyscallTable() {
+	syscallTableMu.Lock()
+	syscallTable = nil
+	syscallTableBuilt = false
+	syscallTableMu.Unlock()
+}
+
+func GetSyscall(hash uint32) Syscall {
+	syscallTableMu.RLock()
+	if syscallTableBuilt {
+		sc := syscallTable[hash]
+		syscallTableMu.RUnlock()
+		return sc
 	}
-	length := 0
-	for {
-		c := *(*byte)(unsafe.Pointer(addr + uintptr(length)))
-		if c == 0 {
-			break
-		}
-		length++
+	syscallTableMu.RUnlock()
+
+	syscallTableMu.Lock()
+	if !syscallTableBuilt {
+		buildSyscallTable()
+		syscallTableBuilt = true
 	}
-	return string(unsafe.Slice((*byte)(unsafe.Pointer(addr)), length))
+	sc := syscallTable[hash]
+	syscallTableMu.Unlock()
+	return sc
 }

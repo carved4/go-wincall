@@ -88,7 +88,7 @@ func HashFromUTF16Len(ptr uintptr, charLen int) uint32 {
 	return hash
 }
 
-// GetHash computes hash of a string, with caching :3
+// GetHash computes hash of a string
 // optimized to hash directly from string bytes without []byte allocation
 func GetHash(s string) uint32 {
 	hash := hashString(s)

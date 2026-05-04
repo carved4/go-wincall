@@ -25,6 +25,10 @@ func CurrentThreadIDFast() uint32 { return wincall.CurrentThreadIDFast() }
 
 func RunOnG0(f func()) { wincall.RunOnG0(f) }
 
+func LoadLibrary(name string) uintptr {
+	return wincall.LdrLoadDLL(name)
+}
+
 func LoadLibraryLdr(name string) uintptr {
 	return wincall.LdrLoadDLL(name)
 }
@@ -45,35 +49,20 @@ func IsDebuggerPresent() bool {
 	return wincall.IsDebuggerPresent()
 }
 
-func Call(dllName, funcName interface{}, args ...interface{}) (uintptr, uintptr, error) {
-	var dllNameStr, funcNameStr string
-
-	switch v := dllName.(type) {
-	case string:
-		dllNameStr = v
-	default:
-		dllNameStr = v.(string)
-	}
-
-	switch v := funcName.(type) {
-	case string:
-		funcNameStr = v
-	default:
-		funcNameStr = v.(string)
-	}
-
-	dllHash := GetHash(dllNameStr)
+func Call(dllName, funcName string, args ...interface{}) (uintptr, uintptr, error) {
+	dllHash := GetHash(dllName)
 	moduleBase := GetModuleBase(dllHash)
 	if moduleBase == 0 {
-		moduleBase = wincall.LoadDll(dllNameStr)
+		moduleBase = wincall.LdrLoadDLL(dllName)
 		if moduleBase == 0 {
-			return 0, 0, errors.New(errors.Err1)
+			return 0, 0, errors.New(errors.ErrModuleNotFound)
 		}
 	}
-	funcHash := GetHash(funcNameStr)
+
+	funcHash := GetHash(funcName)
 	funcAddr := GetFunctionAddress(moduleBase, funcHash)
 	if funcAddr == 0 {
-		return 0, 0, errors.New(errors.Err2)
+		return 0, 0, errors.New(errors.ErrFunctionNotFound)
 	}
 	r1, r2, err := wincall.CallG0(funcAddr, args...)
 	if err != nil {

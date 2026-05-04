@@ -3,8 +3,8 @@ package resolve
 import (
 	"runtime"
 	"sync"
-	_ "unsafe"
 	"unsafe"
+	_ "unsafe"
 
 	"github.com/carved4/go-wincall/pkg/obf"
 	"github.com/carved4/go-wincall/pkg/utils"
@@ -127,26 +127,12 @@ func parseExportsWithHashes(moduleBase uintptr) []exportWithHash {
 
 // cStringLen returns length of null terminated c string without allocating
 func cStringLen(ptr uintptr) int {
-	for i := 0; ; i++ {
+	for i := 0; i < 512; i++ {
 		if *(*byte)(unsafe.Pointer(ptr + uintptr(i))) == 0 {
 			return i
 		}
-		if i >= 512 {
-			return i
-		}
 	}
-}
-
-func readCString(ptr uintptr) string {
-	var buf [512]byte
-	for i := 0; i < len(buf); i++ {
-		b := *(*byte)(unsafe.Pointer(ptr + uintptr(i)))
-		if b == 0 {
-			return string(buf[:i])
-		}
-		buf[i] = b
-	}
-	return string(buf[:])
+	return 512
 }
 
 type API_SET_NAMESPACE struct {
@@ -176,18 +162,15 @@ type API_SET_VALUE_ENTRY struct {
 	ValueLength uint32
 }
 
-// packCacheKey packs moduleBase and functionHash into a single uint64 :0
-// on 64 bit systems, we use lower 32 bits of moduleBase (sufficient for module alignment)
-// combined with functionHash in upper 32 bits. this improves map hashing speed
-// and reduces memory vs a struct key with padding
-func packCacheKey(moduleBase uintptr, functionHash uint32) uint64 {
-	return uint64(uint32(moduleBase)) | (uint64(functionHash) << 32)
+type funcCacheKey struct {
+	base uintptr
+	hash uint32
 }
 
 var (
 	moduleCache        = make(map[uint32]uintptr)
 	moduleCacheMutex   sync.RWMutex
-	functionCache      = make(map[uint64]uintptr) // packed key for better hash performance :3
+	functionCache      = make(map[funcCacheKey]uintptr)
 	functionCacheMutex sync.RWMutex
 	exportIndexCache   = make(map[uintptr]*exportIndex)
 	exportIndexMutex   sync.RWMutex
@@ -224,8 +207,7 @@ func GetCurrentProcessPEB() *utils.PEB {
 	}
 
 	// spin with gosched instead of time.sleep :p
-	// this runs early and rarely fails. gosched keeps us on the same thread
-	// and avoids timer heap activity that sleep incurs
+	// this runs early and rarely fails. peb is per-process so thread migration is safe
 	maxRetries := 50 // more iterations but much faster per iteration
 	for i := 0; i < maxRetries; i++ {
 		runtime.Gosched()
@@ -260,15 +242,6 @@ func GetModuleBase(moduleHash uint32) uintptr {
 		}
 	}
 	moduleListMutex.RUnlock()
-
-	// double check pattern: acquire write lock and re check before doing expensive refresh :3
-	// this prevents multiple goroutines from doing redundant refreshModuleCache calls
-	moduleCacheMutex.Lock()
-	if moduleBase, ok := moduleCache[moduleHash]; ok {
-		moduleCacheMutex.Unlock()
-		return moduleBase
-	}
-	moduleCacheMutex.Unlock()
 
 	return refreshModuleCache(moduleHash)
 }
@@ -318,7 +291,7 @@ func refreshModuleCache(targetHash uint32) uintptr {
 }
 
 func GetFunctionAddress(moduleBase uintptr, functionHash uint32) uintptr {
-	cacheKey := packCacheKey(moduleBase, functionHash)
+	cacheKey := funcCacheKey{moduleBase, functionHash}
 	functionCacheMutex.RLock()
 	if funcAddr, ok := functionCache[cacheKey]; ok {
 		functionCacheMutex.RUnlock()
@@ -736,9 +709,10 @@ func ClearResolveCaches() {
 	moduleCacheMutex.Unlock()
 
 	functionCacheMutex.Lock()
-	functionCache = make(map[uint64]uintptr)
+	functionCache = make(map[funcCacheKey]uintptr)
 	functionCacheMutex.Unlock()
 
+	clearSyscallTable()
 	exportIndexMutex.Lock()
 	exportIndexCache = make(map[uintptr]*exportIndex)
 	exportIndexMutex.Unlock()
